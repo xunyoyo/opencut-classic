@@ -1,4 +1,5 @@
 import {
+	env,
 	pipeline,
 	type AutomaticSpeechRecognitionPipeline,
 	type AutomaticSpeechRecognitionOutput,
@@ -8,6 +9,10 @@ import {
 	DEFAULT_CHUNK_LENGTH_SECONDS,
 	DEFAULT_STRIDE_SECONDS,
 } from "@/transcription/audio";
+
+// huggingface.co is unreachable from mainland China; hf-mirror.com mirrors
+// the same resolve path structure, so this is a drop-in host swap.
+env.remoteHost = "https://hf-mirror.com/";
 
 export type WorkerMessage =
 	| { type: "init"; modelId: string }

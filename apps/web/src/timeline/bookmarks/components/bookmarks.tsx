@@ -92,7 +92,7 @@ export function TimelineBookmarksRow({
 					height: TIMELINE_BOOKMARK_ROW_HEIGHT_PX,
 					width: `${dynamicTimelineWidth}px`,
 				}}
-				aria-label="Timeline ruler"
+				aria-label="时间线标尺"
 				type="button"
 				onWheel={handleWheel}
 				onClick={(event) => {
@@ -189,7 +189,7 @@ function TimelineBookmark({
 						left: `${bookmarkLeft}px`,
 						width: `${bookmarkWidth}px`,
 					}}
-					aria-label={`Bookmark at ${formatNumberForDisplay({ value: mediaTimeToSeconds({ time }), fractionDigits: 1 })}s`}
+					aria-label={`书签位于${formatNumberForDisplay({ value: mediaTimeToSeconds({ time }), fractionDigits: 1 })}秒`}
 					type="button"
 					onMouseDown={handleMouseDown}
 					onClick={handleClick}
@@ -349,16 +349,16 @@ function BookmarkPopoverContent({
 	return (
 		<>
 			<div className="flex flex-col gap-2">
-				<Label className="text-xs">Note</Label>
+				<Label className="text-xs">备注</Label>
 				<Input
-					placeholder="Add a note..."
+					placeholder="添加备注..."
 					value={bookmark.note ?? ""}
 					onChange={(event) => handleUpdate({ note: event.target.value })}
 					className="h-8 text-sm"
 				/>
 			</div>
 			<div className="flex flex-col gap-2">
-				<Label className="text-xs">Color</Label>
+				<Label className="text-xs">颜色</Label>
 				<div className="relative">
 					<ColorPicker
 						value={uppercase({ string: draftColorHex })}
@@ -378,7 +378,7 @@ function BookmarkPopoverContent({
 								type="button"
 								variant="text"
 								size="text"
-								aria-label="Reset to default color"
+								aria-label="重置为默认颜色"
 								className="absolute top-1/2 right-1 -translate-y-1/2 mr-1"
 								onClick={() =>
 									editor.scenes.updateBookmark({
@@ -396,7 +396,7 @@ function BookmarkPopoverContent({
 				</div>
 			</div>
 			<div className="flex flex-col gap-2">
-				<Label className="text-xs">Duration</Label>
+				<Label className="text-xs">时长</Label>
 				<div className="flex items-center gap-1.5">
 					<Input
 						type="number"
@@ -432,10 +432,10 @@ function BookmarkPopoverContent({
 						handleRemove();
 					}
 				}}
-				aria-label="delete bookmark"
+				aria-label="删除书签"
 			>
 				<HugeiconsIcon icon={Delete02Icon} className="!size-3.5" />
-				Delete
+				删除
 			</Button>
 		</>
 	);

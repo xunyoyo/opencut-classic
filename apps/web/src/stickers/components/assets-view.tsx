@@ -55,7 +55,7 @@ export function StickersView() {
 				<Input
 					size="sm"
 					variant="default"
-					placeholder="Search..."
+					placeholder="搜索..."
 					value={searchQuery}
 					onChange={(e) => {
 						setSearchQuery({ query: e.target.value });
@@ -79,7 +79,7 @@ export function StickersView() {
 				variant="underline"
 				className="mt-2 flex min-h-0 flex-1 flex-col"
 			>
-				<TabsList aria-label="Sticker categories">
+				<TabsList aria-label="贴纸分类">
 					{Object.entries(STICKER_CATEGORIES).map(([key, label]) => (
 						<TabsTrigger key={key} value={key}>
 							{label}
@@ -141,7 +141,7 @@ function EmptyView({ message }: { message: string }) {
 				className="text-muted-foreground size-10"
 			/>
 			<div className="flex flex-col gap-2 text-center">
-				<p className="text-lg font-medium">No stickers found</p>
+				<p className="text-lg font-medium">未找到贴纸</p>
 				<p className="text-muted-foreground text-sm text-balance">{message}</p>
 			</div>
 		</div>
@@ -205,7 +205,7 @@ function StickersContentView() {
 					{isRegionSearch && <RegionBanner region={regionLabel} />}
 					<div className="flex items-center justify-between">
 						<span className="text-muted-foreground text-sm">
-							{searchResults.total} results
+							{searchResults.total}个结果
 						</span>
 					</div>
 					<StickerGrid items={searchResults.items} />
@@ -215,7 +215,7 @@ function StickersContentView() {
 
 		// "all" tab search — sections are in browseContent, fall through to section rendering below
 		if (selectedCategory !== "all" && searchQuery) {
-			return <EmptyView message={`No stickers found for "${searchQuery}"`} />;
+			return <EmptyView message={`未找到与“${searchQuery}”匹配的贴纸`} />;
 		}
 	}
 
@@ -233,10 +233,10 @@ function StickersContentView() {
 			<EmptyView
 				message={
 					viewMode === "search"
-						? `No stickers found for "${searchQuery}"`
+						? `未找到与“${searchQuery}”匹配的贴纸`
 						: selectedCategory === "all"
-							? "No stickers available yet."
-							: `No stickers available in ${categoryLabel.toLowerCase()} yet.`
+							? "暂无可用贴纸"
+							: `${categoryLabel}分类下暂无贴纸`
 				}
 			/>
 		);
@@ -288,7 +288,7 @@ function StickerSection({
 								size="sm"
 								className="h-auto gap-1 p-0 text-xs text-muted-foreground"
 							>
-								Clear
+								清除
 							</Button>
 						)}
 
@@ -301,7 +301,7 @@ function StickerSection({
 									onSeeAll(section.action?.category as StickerCategory);
 								}}
 							>
-								See all
+								查看全部
 							</Button>
 						)}
 					</div>
@@ -380,7 +380,7 @@ function StickerItem({
 			addToRecentStickers({ stickerId: item.id });
 		} catch (error) {
 			console.error("Failed to add sticker:", error);
-			toast.error("Failed to add sticker to timeline");
+			toast.error("添加到时间线失败");
 		} finally {
 			setIsAdding(false);
 		}

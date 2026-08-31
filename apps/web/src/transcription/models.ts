@@ -6,30 +6,30 @@ import type {
 export const TRANSCRIPTION_MODELS: TranscriptionModel[] = [
 	{
 		id: "whisper-tiny",
-		name: "Tiny",
+		name: "轻量",
 		huggingFaceId: "onnx-community/whisper-tiny",
-		description: "Fastest, lower accuracy",
+		description: "速度最快，精度较低",
 	},
 	{
 		id: "whisper-small",
-		name: "Small",
+		name: "标准",
 		huggingFaceId: "onnx-community/whisper-small",
-		description: "Good balance of speed and accuracy",
+		description: "速度与精度均衡",
 	},
 	{
 		id: "whisper-medium",
-		name: "Medium",
+		name: "高精度",
 		// The ONNX weights live under a "-ONNX" suffix for this size only;
 		// "onnx-community/whisper-medium" is a different repo that 401s, which
 		// made this the one tier that could never finish downloading.
 		huggingFaceId: "onnx-community/whisper-medium-ONNX",
-		description: "Higher accuracy, slower",
+		description: "精度更高，速度较慢",
 	},
 	{
 		id: "whisper-large-v3-turbo",
-		name: "Large v3 Turbo",
+		name: "最高精度",
 		huggingFaceId: "onnx-community/whisper-large-v3-turbo",
-		description: "Best accuracy, requires WebGPU for good performance",
+		description: "精度最高，需要WebGPU才能获得良好性能",
 	},
 ];
 

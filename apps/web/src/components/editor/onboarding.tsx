@@ -28,13 +28,13 @@ export function Onboarding() {
 	const getStepTitle = () => {
 		switch (step) {
 			case 0:
-				return "Welcome to OpenCut Beta! 🎉";
+				return "欢迎使用OpenCut测试版！🎉";
 			case 1:
-				return "⚠️ This is a super early beta!";
+				return "⚠️ 这还是个非常早期的测试版！";
 			case 2:
-				return "🦋 Have fun testing!";
+				return "🦋 祝测试愉快！";
 			default:
-				return "OpenCut Onboarding";
+				return "OpenCut新手引导";
 		}
 	};
 
@@ -44,10 +44,10 @@ export function Onboarding() {
 				return (
 					<div className="space-y-5">
 						<div className="space-y-3">
-							<Title title="Welcome to OpenCut Beta! 🎉" />
-							<Description description="You're among the first to try OpenCut - the fully open source CapCut alternative." />
+							<Title title="欢迎使用OpenCut测试版！🎉" />
+							<Description description="你是最早试用OpenCut的人之一——一款完全开源的CapCut替代品" />
 						</div>
-						<NextButton onClick={handleNext}>Next</NextButton>
+						<NextButton onClick={handleNext}>下一步</NextButton>
 					</div>
 				);
 			case 1:
@@ -55,11 +55,11 @@ export function Onboarding() {
 					<div className="space-y-5">
 						<div className="space-y-3">
 							<Title title={getStepTitle()} />
-							<Description description="There's still a ton of things to do to make this editor amazing." />
-							<Description description="A lot of features are still missing. We're working hard to build them out!" />
-							<Description description="If you're curious, check out our roadmap [here](https://opencut.app/roadmap)" />
+							<Description description="要让这款编辑器变得完美，还有很多事要做" />
+							<Description description="还缺不少功能，我们正在努力开发！" />
+							<Description description="如果你感兴趣，可以查看我们的[路线图](https://opencut.app/roadmap)" />
 						</div>
-						<NextButton onClick={handleNext}>Next</NextButton>
+						<NextButton onClick={handleNext}>下一步</NextButton>
 					</div>
 				);
 			case 2:
@@ -68,10 +68,10 @@ export function Onboarding() {
 						<div className="space-y-3">
 							<Title title={getStepTitle()} />
 							<Description
-								description={`Join our [Discord](${SOCIAL_LINKS.discord}), chat with cool people and share feedback to help make OpenCut the best editor ever.`}
+								description={`加入我们的[Discord](${SOCIAL_LINKS.discord})，和大家聊天，分享反馈，一起把OpenCut打造成最好用的编辑器`}
 							/>
 						</div>
-						<NextButton onClick={handleClose}>Finish</NextButton>
+						<NextButton onClick={handleClose}>完成</NextButton>
 					</div>
 				);
 			default:

@@ -85,14 +85,14 @@ export function CopyMarkdownButton({
 				"flex items-center gap-1.5",
 				copied && "pointer-events-none",
 			)}
-			title="Copy as markdown"
+			title="复制为Markdown"
 		>
 			{copied ? (
 				<CheckIcon className="size-4" />
 			) : (
 				<ClipboardIcon className="size-4" />
 			)}
-			{copied ? "Copied!" : "Copy markdown"}
+			{copied ? "已复制！" : "复制Markdown"}
 		</Button>
 	);
 }

@@ -43,25 +43,23 @@ export function MobileGate({ children }: MobileGateProps) {
 				onClick={handleGoBack}
 			>
 				<HugeiconsIcon icon={ArrowLeft01Icon} className="size-4" />
-				<span className=" text-sm">Go back</span>
+				<span className=" text-sm">返回</span>
 			</Button>
 
 			<div className="flex flex-1 flex-col justify-center gap-5 px-7">
 				<div className="flex flex-col gap-3">
 					<h1 className="text-foreground text-3xl font-bold tracking-tight">
-						Desktop only (for now)
+						暂仅支持桌面端
 					</h1>
 					<p className="text-muted-foreground text-sm leading-relaxed">
-						OpenCut isn't optimized for mobile or iPad yet. Things will break
-						and the layout will be a mess. Come back on a desktop for the real
-						experience.
+						OpenCut目前还没有针对移动端或iPad优化，界面会错乱，功能也可能出问题，请在桌面端获得完整体验
 					</p>
 				</div>
 				<div className="flex items-center gap-3">
-					<Button onClick={handleContinue}>Take a look anyway</Button>
+					<Button onClick={handleContinue}>仍要查看</Button>
 					<Button variant="ghost" asChild>
 						<Link href="/roadmap" className="flex items-center gap-1">
-							Roadmap
+							路线图
 							<HugeiconsIcon icon={ArrowRight01Icon} size={14} />
 						</Link>
 					</Button>

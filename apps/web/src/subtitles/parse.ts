@@ -18,7 +18,7 @@ export function parseSubtitleFile({
 		case "ass":
 			return parseAss({ input });
 		default:
-			throw new Error("Unsupported subtitle format");
+			throw new Error("不支持的字幕格式");
 	}
 }
 

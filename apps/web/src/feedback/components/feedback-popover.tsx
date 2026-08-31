@@ -69,7 +69,7 @@ function useFeedback() {
 
 			if (!res.ok) {
 				const data = await res.json().catch(() => null);
-				throw new Error(data?.error ?? "Failed to submit");
+				throw new Error(data?.error ?? "提交失败");
 			}
 
 			const { entry } = await res.json();
@@ -77,10 +77,10 @@ function useFeedback() {
 			setEntries(next);
 			writeHistory({ entries: next });
 			onSuccess();
-			toast.success("Feedback sent");
+			toast.success("反馈已发送");
 		} catch (error) {
 			toast.error(
-				error instanceof Error ? error.message : "Failed to send feedback",
+				error instanceof Error ? error.message : "发送反馈失败",
 			);
 		} finally {
 			setIsSubmitting(false);
@@ -97,7 +97,7 @@ export function FeedbackPopover() {
 		<Popover open={open} onOpenChange={setOpen}>
 			<PopoverTrigger asChild>
 				<Button variant="outline" className="h-8">
-					Send feedback
+					发送反馈
 				</Button>
 			</PopoverTrigger>
 			<PopoverContent align="end" className="w-80 p-0">
@@ -148,7 +148,7 @@ function FeedbackPopoverContent({ onClose }: { onClose: () => void }) {
 						onClick={() => setView("compose")}
 						className="text-xs text-muted-foreground/60 hover:text-muted-foreground transition-colors"
 					>
-						← Back
+						← 返回
 					</button>
 				</div>
 			</div>
@@ -166,7 +166,7 @@ function FeedbackPopoverContent({ onClose }: { onClose: () => void }) {
 							<FormItem>
 								<FormControl>
 									<Textarea
-										placeholder="Thoughts, bugs, ideas..."
+										placeholder="想法、问题、建议..."
 										className="min-h-[7rem] text-sm p-3 bg-background shadow-none border-none! resize-none"
 										{...field}
 									/>
@@ -195,7 +195,7 @@ function FeedbackPopoverContent({ onClose }: { onClose: () => void }) {
 									size="sm"
 									onClick={onClose}
 								>
-									Cancel
+									取消
 								</Button>
 							)}
 							<Button
@@ -203,7 +203,7 @@ function FeedbackPopoverContent({ onClose }: { onClose: () => void }) {
 								size="sm"
 								disabled={isSubmitting || !form.watch("message").trim()}
 							>
-								{isSubmitting ? <Spinner /> : "Send"}
+								{isSubmitting ? <Spinner /> : "发送"}
 							</Button>
 						</div>
 					</div>
@@ -216,12 +216,12 @@ function FeedbackPopoverContent({ onClose }: { onClose: () => void }) {
 function relativeDate(iso: string): string {
 	const diff = Date.now() - new Date(iso).getTime();
 	const mins = Math.floor(diff / 60_000);
-	if (mins < 1) return "just now";
-	if (mins < 60) return `${mins}m ago`;
+	if (mins < 1) return "刚刚";
+	if (mins < 60) return `${mins}分钟前`;
 	const hrs = Math.floor(mins / 60);
-	if (hrs < 24) return `${hrs}h ago`;
+	if (hrs < 24) return `${hrs}小时前`;
 	const days = Math.floor(hrs / 24);
-	if (days < 7) return `${days}d ago`;
+	if (days < 7) return `${days}天前`;
 	return new Date(iso).toLocaleDateString(undefined, {
 		month: "short",
 		day: "numeric",

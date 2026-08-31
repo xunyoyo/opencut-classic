@@ -228,31 +228,31 @@ export function parseAss({ input }: { input: string }): ParseSubtitleResult {
 
 	if (strippedInlineTagCueCount > 0) {
 		warnings.add(
-			`Stripped unsupported ASS inline override tags from ${strippedInlineTagCueCount} subtitle cue(s).`,
+			`已从${strippedInlineTagCueCount}条字幕中移除不支持的ASS内联样式标签`,
 		);
 	}
 
 	if (ignoredEffectCount > 0) {
 		warnings.add(
-			`Ignored ASS event effects in ${ignoredEffectCount} subtitle cue(s).`,
+			`已忽略${ignoredEffectCount}条字幕中的ASS事件特效`,
 		);
 	}
 
 	if (missingStyleCueCount > 0) {
 		warnings.add(
-			`Fell back to default subtitle styling for ${missingStyleCueCount} cue(s) that referenced missing ASS styles.`,
+			`${missingStyleCueCount}条字幕引用的ASS样式不存在，已改用默认样式`,
 		);
 	}
 
 	if (skippedNonDialogueEventCount > 0) {
 		warnings.add(
-			`Ignored ${skippedNonDialogueEventCount} non-dialogue ASS event(s).`,
+			`已忽略${skippedNonDialogueEventCount}条非对话ASS事件`,
 		);
 	}
 
 	if (usesHeavilyUnsupportedStyles) {
 		warnings.add(
-			"Ignored unsupported ASS style features such as outline, shadow, rotation, or scaling.",
+			"已忽略不支持的ASS样式效果，如描边、阴影、旋转或缩放",
 		);
 	}
 

@@ -22,13 +22,13 @@ export function AssetsPanel() {
 		effects: <EffectsView />,
 		transitions: (
 			<div className="text-muted-foreground p-4">
-				Transitions view coming soon...
+				转场功能即将上线...
 			</div>
 		),
 		captions: <Captions />,
 		adjustment: (
 			<div className="text-muted-foreground p-4">
-				Adjustment view coming soon...
+				调整功能即将上线...
 			</div>
 		),
 		settings: <SettingsView />,

@@ -63,7 +63,7 @@ export function ChangelogNotification() {
 					size="icon"
 					className="-mr-1 -mt-1 shrink-0"
 					onClick={() => setRelease(null)}
-					aria-label="Dismiss"
+					aria-label="关闭"
 				>
 					<HugeiconsIcon icon={Cancel01Icon} className="size-4" />
 				</Button>
@@ -78,7 +78,7 @@ export function ChangelogNotification() {
 			<div className="flex justify-end">
 				<Button asChild size="sm">
 					<Link href="/changelog" onClick={() => setRelease(null)}>
-						See full changelog
+						查看完整更新日志
 					</Link>
 				</Button>
 			</div>

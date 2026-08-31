@@ -28,6 +28,15 @@ const defaultTextBackground = {
 	offsetY: 0,
 };
 
+// Off by default: a stroke is what makes captions legible over footage, but
+// turning it on for every text element would change how existing projects
+// render.
+const defaultTextStroke = {
+	enabled: false,
+	color: "#000000",
+	width: 4,
+};
+
 const defaultTextElement: Omit<TextElement, "id"> = {
 	type: "text",
 	name: "文本",
@@ -53,6 +62,9 @@ const defaultTextElement: Omit<TextElement, "id"> = {
 		"background.paddingY": defaultTextBackground.paddingY,
 		"background.offsetX": defaultTextBackground.offsetX,
 		"background.offsetY": defaultTextBackground.offsetY,
+		"stroke.enabled": defaultTextStroke.enabled,
+		"stroke.color": defaultTextStroke.color,
+		"stroke.width": defaultTextStroke.width,
 		"transform.positionX": defaultTransform.position.x,
 		"transform.positionY": defaultTransform.position.y,
 		"transform.scaleX": defaultTransform.scaleX,
@@ -80,6 +92,7 @@ export const DEFAULTS = {
 		letterSpacing: defaultTextLetterSpacing,
 		lineHeight: defaultTextLineHeight,
 		background: defaultTextBackground,
+		stroke: defaultTextStroke,
 		element: defaultTextElement,
 	},
 	timeline: {

@@ -2,6 +2,7 @@ import { CORNER_RADIUS_MIN } from "@/text/background";
 import { DEFAULTS } from "@/timeline/defaults";
 import type { TextElement } from "@/timeline";
 import type { TextBackground } from "@/text/background";
+import type { TextStroke } from "@/text/stroke";
 import { resolveNumberAtTime } from "@/animation/values";
 import {
 	getTextVisualRect,
@@ -219,6 +220,33 @@ export function buildTextBackgroundFromElement({
 			params: element.params,
 			key: "background.offsetY",
 			fallback: DEFAULTS.text.background.offsetY,
+		}),
+	};
+}
+
+// Unlike the background, a stroke does not affect layout — it is painted
+// around the same glyphs the fill uses — so this is read at draw time rather
+// than folded into the measurement.
+export function buildTextStrokeFromElement({
+	element,
+}: {
+	element: TextElement;
+}): TextStroke {
+	return {
+		enabled: readBooleanParam({
+			params: element.params,
+			key: "stroke.enabled",
+			fallback: DEFAULTS.text.stroke.enabled,
+		}),
+		color: readStringParam({
+			params: element.params,
+			key: "stroke.color",
+			fallback: DEFAULTS.text.stroke.color,
+		}),
+		width: readNumberParam({
+			params: element.params,
+			key: "stroke.width",
+			fallback: DEFAULTS.text.stroke.width,
 		}),
 	};
 }

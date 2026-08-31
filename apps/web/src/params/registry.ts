@@ -10,6 +10,7 @@ import type {
 	TimelineElement,
 } from "@/timeline";
 import { DEFAULTS } from "@/timeline/defaults";
+import { STROKE_WIDTH_MAX, STROKE_WIDTH_MIN } from "@/text/stroke";
 import { VOLUME_DB_MAX, VOLUME_DB_MIN } from "@/timeline/audio-constants";
 import {
 	CORNER_RADIUS_MAX,
@@ -323,6 +324,35 @@ const textElementParams: ElementParamDefinition[] = [
 		min: -100_000,
 		step: 1,
 		dependencies: [{ param: "background.enabled", equals: true }],
+	},
+	{
+		key: "stroke.enabled",
+		label: "启用描边",
+		type: "boolean",
+		default: DEFAULTS.text.stroke.enabled,
+		keyframable: false,
+	},
+	{
+		key: "stroke.color",
+		label: "描边颜色",
+		type: "color",
+		default: DEFAULTS.text.stroke.color,
+		// Neither stroke path is in AnimationPropertyPath, so offering a
+		// keyframe toggle here would hand the user a control the animation
+		// system cannot resolve.
+		keyframable: false,
+		dependencies: [{ param: "stroke.enabled", equals: true }],
+	},
+	{
+		key: "stroke.width",
+		label: "描边宽度",
+		type: "number",
+		default: DEFAULTS.text.stroke.width,
+		min: STROKE_WIDTH_MIN,
+		max: STROKE_WIDTH_MAX,
+		step: 1,
+		keyframable: false,
+		dependencies: [{ param: "stroke.enabled", equals: true }],
 	},
 ];
 

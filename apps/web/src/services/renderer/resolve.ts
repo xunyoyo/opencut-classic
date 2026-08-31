@@ -14,6 +14,7 @@ import {
 } from "@/graphics";
 import {
 	buildTextBackgroundFromElement,
+	buildTextStrokeFromElement,
 	getTextMeasurementContext,
 	measureTextElement,
 } from "@/text/measure-element";
@@ -332,6 +333,7 @@ function resolveTextNode({
 		elementDuration: node.params.duration,
 	});
 	const background = buildTextBackgroundFromElement({ element: node.params });
+	const stroke = buildTextStrokeFromElement({ element: node.params });
 
 	return {
 		transform: resolveTransformAtTime({
@@ -359,6 +361,11 @@ function resolveTextNode({
 			propertyPath: "background.color",
 			localTime,
 		}),
+		stroke,
+		// Not run through resolveColorAtTime: animating it would mean adding
+		// "stroke.color" to AnimationPropertyPath, which the keyframe system and
+		// the curve editor both key off. Not worth that for a stroke colour.
+		strokeColor: stroke.color,
 		effectPasses: resolveEffectPassGroups({
 			effects: node.params.effects,
 			animations: node.params.animations,

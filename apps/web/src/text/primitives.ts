@@ -2,6 +2,7 @@ import type { TextCanvasContext, TextBlockMeasurement } from "@/text/layout";
 import { DEFAULTS } from "@/timeline/defaults";
 import { clamp } from "@/utils/math";
 import { CORNER_RADIUS_MAX, CORNER_RADIUS_MIN } from "./background";
+import type { TextStroke } from "./stroke";
 import {
 	drawTextDecoration,
 	getTextBackgroundRect,
@@ -144,6 +145,7 @@ export function drawMeasuredTextLayout({
 	textColor,
 	background,
 	backgroundColor,
+	stroke,
 	textBaseline = "middle",
 }: {
 	ctx: TextCanvasContext;
@@ -151,6 +153,7 @@ export function drawMeasuredTextLayout({
 	textColor: string;
 	background?: ResolvedTextBackgroundLike | null;
 	backgroundColor?: string;
+	stroke?: TextStroke | null;
 	textBaseline?: CanvasTextBaseline;
 }): void {
 	ctx.font = layout.fontString;
@@ -195,6 +198,19 @@ export function drawMeasuredTextLayout({
 			ctx.fill();
 			ctx.fillStyle = textColor;
 		}
+	}
+
+	// After the background and before the fill. A stroke straddles the path it
+	// follows, so painting it last would eat half its width out of the glyph.
+	if (stroke?.enabled && stroke.width > 0) {
+		strokeMeasuredTextLayout({
+			ctx,
+			layout,
+			strokeColor: stroke.color,
+			strokeWidth: stroke.width,
+			textBaseline,
+		});
+		ctx.fillStyle = textColor;
 	}
 
 	for (let index = 0; index < layout.lines.length; index++) {

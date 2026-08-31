@@ -20,6 +20,15 @@ const webEnvSchema = z.object({
 		.default("https://hf-mirror.com/"),
 	NEXT_PUBLIC_TRANSCRIPTION_MODEL_PATH_TEMPLATE: z.string().optional(),
 
+	// Where webfont stylesheets are loaded from. fonts.googleapis.com and
+	// Google's own fonts.googleapis.cn mirror are both unreachable from the
+	// mainland, so point this at a bucket holding one rewritten stylesheet per
+	// family. Setting it also narrows the picker to the mirrored families —
+	// offering the full atlas would just be a list of fonts that cannot load.
+	// Read off process.env rather than through this module, same as the model
+	// host above.
+	NEXT_PUBLIC_FONT_CSS_BASE: z.url().optional(),
+
 	// Server
 	DATABASE_URL: z.string().refine(
 		(url) =>

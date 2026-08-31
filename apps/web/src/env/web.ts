@@ -10,6 +10,16 @@ const webEnvSchema = z.object({
 	NEXT_PUBLIC_SITE_URL: z.url().default("http://localhost:3000"),
 	NEXT_PUBLIC_MARBLE_API_URL: z.url(),
 
+	// Where Whisper weights are downloaded from. Declared here as the single
+	// place env vars are documented, but the transcription worker reads them
+	// straight off process.env — it cannot import this module, which parses the
+	// server-side schema. Point these at your own bucket to stop depending on a
+	// public mirror.
+	NEXT_PUBLIC_TRANSCRIPTION_MODEL_HOST: z
+		.url()
+		.default("https://hf-mirror.com/"),
+	NEXT_PUBLIC_TRANSCRIPTION_MODEL_PATH_TEMPLATE: z.string().optional(),
+
 	// Server
 	DATABASE_URL: z.string().refine(
 		(url) =>
@@ -23,6 +33,17 @@ const webEnvSchema = z.object({
 	MARBLE_WORKSPACE_KEY: z.string(),
 	FREESOUND_CLIENT_ID: z.string(),
 	FREESOUND_API_KEY: z.string(),
+
+	// AI-Saturn integration. Both default so existing deployments keep booting
+	// without new env vars; only the import route reads them.
+	SATURN_API_BASE: z.url().default("http://localhost:8080"),
+	// Comma-separated allowlist for the asset proxy. Without it the proxy would
+	// fetch any URL the caller supplies, which is an SSRF hole.
+	SATURN_ASSET_HOSTS: z
+		.string()
+		.default(
+			"cdn-saturndf.xiaotuxp.com,saturndf-oss.oss-cn-beijing.aliyuncs.com",
+		),
 });
 
 export type WebEnv = z.infer<typeof webEnvSchema>;

@@ -19,7 +19,10 @@ export const TRANSCRIPTION_MODELS: TranscriptionModel[] = [
 	{
 		id: "whisper-medium",
 		name: "Medium",
-		huggingFaceId: "onnx-community/whisper-medium",
+		// The ONNX weights live under a "-ONNX" suffix for this size only;
+		// "onnx-community/whisper-medium" is a different repo that 401s, which
+		// made this the one tier that could never finish downloading.
+		huggingFaceId: "onnx-community/whisper-medium-ONNX",
 		description: "Higher accuracy, slower",
 	},
 	{

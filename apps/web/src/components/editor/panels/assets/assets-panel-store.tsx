@@ -87,6 +87,14 @@ interface AssetsPanelStore {
 	highlightMediaId: string | null;
 	requestRevealMedia: (mediaId: string) => void;
 	clearHighlight: () => void;
+	/**
+	 * Set when something outside the panel — currently the AI-Saturn importer —
+	 * wants captions generated as soon as the Captions view mounts. Deliberately
+	 * not persisted, so a page reload doesn't re-trigger a model download.
+	 */
+	pendingAutoCaption: boolean;
+	requestAutoCaption: () => void;
+	clearAutoCaption: () => void;
 
 	/* Media */
 	mediaViewMode: MediaViewMode;
@@ -105,6 +113,10 @@ export const useAssetsPanelStore = create<AssetsPanelStore>()(
 			requestRevealMedia: (mediaId) =>
 				set({ activeTab: "media", highlightMediaId: mediaId }),
 			clearHighlight: () => set({ highlightMediaId: null }),
+			pendingAutoCaption: false,
+			requestAutoCaption: () =>
+				set({ activeTab: "captions", pendingAutoCaption: true }),
+			clearAutoCaption: () => set({ pendingAutoCaption: false }),
 			mediaViewMode: "grid",
 			setMediaViewMode: (mode) => set({ mediaViewMode: mode }),
 			mediaSortBy: "name",

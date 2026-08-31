@@ -10,9 +10,23 @@ import {
 	DEFAULT_STRIDE_SECONDS,
 } from "@/transcription/audio";
 
-// huggingface.co is unreachable from mainland China; hf-mirror.com mirrors
-// the same resolve path structure, so this is a drop-in host swap.
-env.remoteHost = "https://hf-mirror.com/";
+// huggingface.co is unreachable from mainland China. The host is configurable
+// so a deployment can serve the weights from its own CDN or OSS bucket rather
+// than depending on a public mirror; hf-mirror.com stays the fallback because
+// it mirrors huggingface.co's resolve path structure exactly.
+//
+// These read process.env directly instead of going through @/env/web: this
+// module runs in a worker, and that one parses the full server-side schema.
+// Next.js inlines NEXT_PUBLIC_* at build time, so the values still arrive here.
+env.remoteHost =
+	process.env.NEXT_PUBLIC_TRANSCRIPTION_MODEL_HOST ?? "https://hf-mirror.com/";
+
+// Only override when set — a flat object-storage layout won't have the
+// "{model}/resolve/{revision}" path that the default template assumes.
+if (process.env.NEXT_PUBLIC_TRANSCRIPTION_MODEL_PATH_TEMPLATE) {
+	env.remotePathTemplate =
+		process.env.NEXT_PUBLIC_TRANSCRIPTION_MODEL_PATH_TEMPLATE;
+}
 
 export type WorkerMessage =
 	| { type: "init"; modelId: string }

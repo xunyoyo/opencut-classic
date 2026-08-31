@@ -7,7 +7,7 @@ import {
 	SelectTrigger,
 	SelectValue,
 } from "@/components/ui/select";
-import { useReducer, useRef, useState } from "react";
+import { useEffect, useReducer, useRef, useState } from "react";
 import { extractTimelineAudio } from "@/media/mediabunny";
 import { useEditor } from "@/editor/use-editor";
 import { TRANSCRIPTION_DIAGNOSTICS_SCOPE } from "@/transcription/diagnostics";
@@ -39,6 +39,7 @@ import {
 	TooltipTrigger,
 } from "@/components/ui/tooltip";
 import type { DiagnosticSeverity } from "@/diagnostics/types";
+import { useAssetsPanelStore } from "@/components/editor/panels/assets/assets-panel-store";
 
 const DIAGNOSTIC_BUTTON_VARIANT: Record<
 	DiagnosticSeverity,
@@ -90,6 +91,12 @@ export function Captions() {
 	const containerRef = useRef<HTMLDivElement>(null);
 	const fileInputRef = useRef<HTMLInputElement>(null);
 	const editor = useEditor();
+	const pendingAutoCaption = useAssetsPanelStore(
+		(state) => state.pendingAutoCaption,
+	);
+	const clearAutoCaption = useAssetsPanelStore(
+		(state) => state.clearAutoCaption,
+	);
 
 	const isProcessing = processing.status === "processing";
 
@@ -158,6 +165,23 @@ export function Captions() {
 			});
 		}
 	};
+
+	// The AI-Saturn importer lands the user directly on this view and wants
+	// captions generated without a click. The ref guard is load-bearing:
+	// handleGenerateTranscript is rebuilt on every render and the flag clears
+	// asynchronously, so without it a re-render mid-download would start a
+	// second transcription on top of the first.
+	const hasAutoStarted = useRef(false);
+	useEffect(() => {
+		if (!pendingAutoCaption || hasAutoStarted.current) return;
+		hasAutoStarted.current = true;
+		clearAutoCaption();
+		void handleGenerateTranscript();
+		// Intentionally keyed on the request flag alone — the ref above already
+		// guarantees a single run, so re-running on handler identity would only
+		// risk duplicate transcriptions.
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [pendingAutoCaption]);
 
 	const handleImportClick = () => {
 		fileInputRef.current?.click();

@@ -75,10 +75,19 @@ export async function decodeAudioToFloat32({
 	const length = audioBuffer.length;
 	const samples = new Float32Array(length);
 
+	// Grab the channel buffers once. getChannelData() is a Web Audio API call
+	// rather than a property read, so calling it per sample per channel costs a
+	// JS/C++ boundary crossing every time — for a few minutes of audio that is
+	// millions of calls on the main thread, long enough to freeze the tab.
+	const channels: Float32Array[] = [];
+	for (let channel = 0; channel < numChannels; channel++) {
+		channels.push(audioBuffer.getChannelData(channel));
+	}
+
 	for (let i = 0; i < length; i++) {
 		let sum = 0;
 		for (let channel = 0; channel < numChannels; channel++) {
-			sum += audioBuffer.getChannelData(channel)[i];
+			sum += channels[channel][i];
 		}
 		samples[i] = sum / numChannels;
 	}

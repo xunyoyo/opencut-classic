@@ -6,7 +6,7 @@ import { ChangelogNotification } from "@/changelog/components/changelog-notifica
 import { TooltipProvider } from "../components/ui/tooltip";
 import { baseMetaData } from "./metadata";
 import { BotIdClient } from "botid/client";
-import { webEnv } from "@/env/web";
+// import { webEnv } from "@/env/web"; // only read by the analytics beacon below
 import { Inter } from "next/font/google";
 
 const siteFont = Inter({ subsets: ["latin"] });
@@ -47,7 +47,13 @@ export default function RootLayout({
 				>
 					<TooltipProvider>
 						<Toaster />
-						<Script
+						{/*
+						  Upstream's analytics beacon, reporting to OpenCut's own
+						  Databuddy account. Commented out for our deployment: it is
+						  an outbound request on every page load, carrying a client
+						  id that is not ours, and this is an internal tool.
+						*/}
+						{/* <Script
 							src="https://cdn.databuddy.cc/databuddy.js"
 							strategy="afterInteractive"
 							async
@@ -58,7 +64,7 @@ export default function RootLayout({
 							data-track-outgoing-links={false}
 							data-track-web-vitals={false}
 							data-track-sessions={false}
-						/>
+						/> */}
 						{children}
 					</TooltipProvider>
 				</ThemeProvider>

@@ -10,14 +10,14 @@ import { ThemeToggle } from "./theme-toggle";
 import {
 	Copy01Icon,
 	Download01Icon,
-	GithubIcon,
-	LinkSquare02Icon,
+	// GithubIcon,
+	// LinkSquare02Icon,
 	Menu02Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { cn } from "@/utils/ui";
 import { DEFAULT_LOGO_URL, SITE_URL } from "@/site/brand";
-import { SOCIAL_LINKS } from "@/site/social";
+// import { SOCIAL_LINKS } from "@/site/social";
 import {
 	ContextMenu,
 	ContextMenuContent,
@@ -29,23 +29,26 @@ export function Header() {
 	const [isMenuOpen, setIsMenuOpen] = useState(false);
 	const closeMenu = () => setIsMenuOpen(false);
 
-	const links = [
-		{
-			label: "Roadmap",
-			href: "/roadmap",
-		},
-		{
-			label: "Contributors",
-			href: "/contributors",
-		},
-		{
-			label: "Sponsors",
-			href: "/sponsors",
-		},
-		{
-			label: "Blog",
-			href: "/blog",
-		},
+	// The upstream project's own promotion. Nothing here belongs in an internal
+	// deployment, so the nav is empty rather than removed — restoring it is a
+	// matter of uncommenting.
+	const links: { label: string; href: string }[] = [
+		// {
+		// 	label: "Roadmap",
+		// 	href: "/roadmap",
+		// },
+		// {
+		// 	label: "Contributors",
+		// 	href: "/contributors",
+		// },
+		// {
+		// 	label: "Sponsors",
+		// 	href: "/sponsors",
+		// },
+		// {
+		// 	label: "Blog",
+		// 	href: "/blog",
+		// },
 	];
 
 	return (
@@ -86,12 +89,13 @@ export function Header() {
 								<HugeiconsIcon icon={Download01Icon} />
 								Download SVG
 							</ContextMenuItem>
-							<Link href="/brand">
+							{/* /brand is one of the routes the middleware hides. */}
+							{/* <Link href="/brand">
 								<ContextMenuItem>
 									<HugeiconsIcon icon={LinkSquare02Icon} />
 									Brand assets
 								</ContextMenuItem>
-							</Link>
+							</Link> */}
 						</ContextMenuContent>
 					</ContextMenu>
 
@@ -118,12 +122,13 @@ export function Header() {
 						</Button>
 					</div>
 					<div className="hidden items-center gap-3 md:flex">
-						<Link href={SOCIAL_LINKS.github}>
+						{/* The upstream repo's star count, linking off to GitHub. */}
+						{/* <Link href={SOCIAL_LINKS.github}>
 							<Button className="bg-background text-sm" variant="outline">
 								<HugeiconsIcon icon={GithubIcon} className="size-4" />
 								40k+
 							</Button>
-						</Link>
+						</Link> */}
 						<Link href="/projects">
 							<Button className="text-sm">
 								Projects

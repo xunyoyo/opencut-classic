@@ -1,9 +1,9 @@
 import Link from "next/link";
-import { RiDiscordFill, RiTwitterXLine } from "react-icons/ri";
-import { FaGithub } from "react-icons/fa6";
+// import { RiDiscordFill, RiTwitterXLine } from "react-icons/ri";
+// import { FaGithub } from "react-icons/fa6";
 import Image from "next/image";
 import { DEFAULT_LOGO_URL } from "@/site/brand";
-import { SOCIAL_LINKS } from "@/site/social";
+// import { SOCIAL_LINKS } from "@/site/social";
 import { capitalizeFirstLetter } from "@/utils/string";
 
 type Category = "resources" | "company";
@@ -15,19 +15,23 @@ interface FooterLink {
 
 type CategoryLinks = Record<Category, FooterLink[]>;
 
+// Everything commented out here either promotes the upstream project or is a
+// route the middleware now hides, so linking to it would only produce a 404.
+// Changelog stays because it describes the software people are using. An
+// emptied category is skipped below rather than rendering a bare heading.
 const links: CategoryLinks = {
 	resources: [
-		{ label: "Roadmap", href: "/roadmap" },
+		// { label: "Roadmap", href: "/roadmap" },
 		{ label: "Changelog", href: "/changelog" },
-		{ label: "Blog", href: "/blog" },
-		{ label: "Privacy", href: "/privacy" },
-		{ label: "Terms of use", href: "/terms" },
+		// { label: "Blog", href: "/blog" },
+		// { label: "Privacy", href: "/privacy" },
+		// { label: "Terms of use", href: "/terms" },
 	],
 	company: [
-		{ label: "Contributors", href: "/contributors" },
-		{ label: "Sponsors", href: "/sponsors" },
-		{ label: "Brand", href: "/brand" },
-		{ label: "About", href: `${SOCIAL_LINKS.github}/blob/main/README.md` },
+		// { label: "Contributors", href: "/contributors" },
+		// { label: "Sponsors", href: "/sponsors" },
+		// { label: "Brand", href: "/brand" },
+		// { label: "About", href: `${SOCIAL_LINKS.github}/blob/main/README.md` },
 	],
 };
 
@@ -51,7 +55,8 @@ export function Footer() {
 						<p className="text-muted-foreground mb-5 text-sm md:text-left">
 							The privacy-first video editor that feels simple to use.
 						</p>
-						<div className="flex justify-start gap-3">
+						{/* Upstream's GitHub, X and Discord. */}
+						{/* <div className="flex justify-start gap-3">
 							<Link
 								href={SOCIAL_LINKS.github}
 								className="text-muted-foreground hover:text-foreground transition-colors"
@@ -76,37 +81,39 @@ export function Footer() {
 							>
 								<RiDiscordFill className="size-5" />
 							</Link>
-						</div>
+						</div> */}
 					</div>
 
 					<div className="flex items-start justify-start gap-12 py-2">
-						{(Object.keys(links) as Category[]).map((category) => (
-							<div key={category} className="flex flex-col gap-2">
-								<h3 className="text-foreground font-semibold">
-									{capitalizeFirstLetter({ string: category })}
-								</h3>
-								<ul className="space-y-2 text-sm">
-									{links[category].map((link) => (
-										<li key={link.href}>
-											<Link
-												href={link.href}
-												className="text-muted-foreground hover:text-foreground transition-colors"
-												target={
-													link.href.startsWith("http") ? "_blank" : undefined
-												}
-												rel={
-													link.href.startsWith("http")
-														? "noopener noreferrer"
-														: undefined
-												}
-											>
-												{link.label}
-											</Link>
-										</li>
-									))}
-								</ul>
-							</div>
-						))}
+						{(Object.keys(links) as Category[])
+							.filter((category) => links[category].length > 0)
+							.map((category) => (
+								<div key={category} className="flex flex-col gap-2">
+									<h3 className="text-foreground font-semibold">
+										{capitalizeFirstLetter({ string: category })}
+									</h3>
+									<ul className="space-y-2 text-sm">
+										{links[category].map((link) => (
+											<li key={link.href}>
+												<Link
+													href={link.href}
+													className="text-muted-foreground hover:text-foreground transition-colors"
+													target={
+														link.href.startsWith("http") ? "_blank" : undefined
+													}
+													rel={
+														link.href.startsWith("http")
+															? "noopener noreferrer"
+															: undefined
+													}
+												>
+													{link.label}
+												</Link>
+											</li>
+										))}
+									</ul>
+								</div>
+							))}
 					</div>
 				</div>
 

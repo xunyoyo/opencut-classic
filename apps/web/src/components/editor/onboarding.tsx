@@ -3,7 +3,7 @@
 import { ArrowRightIcon } from "lucide-react";
 import { useState } from "react";
 import ReactMarkdown from "react-markdown";
-import { SOCIAL_LINKS } from "@/site/social";
+// import { SOCIAL_LINKS } from "@/site/social";
 import { useLocalStorage } from "@/services/storage/use-local-storage";
 import { Button } from "../ui/button";
 import { Dialog, DialogBody, DialogContent, DialogTitle } from "../ui/dialog";
@@ -57,7 +57,7 @@ export function Onboarding() {
 							<Title title={getStepTitle()} />
 							<Description description="要让这款编辑器变得完美，还有很多事要做" />
 							<Description description="还缺不少功能，我们正在努力开发！" />
-							<Description description="如果你感兴趣，可以查看我们的[路线图](https://opencut.app/roadmap)" />
+							{/* <Description description="如果你感兴趣，可以查看我们的[路线图](https://opencut.app/roadmap)" /> */}
 						</div>
 						<NextButton onClick={handleNext}>下一步</NextButton>
 					</div>
@@ -67,9 +67,13 @@ export function Onboarding() {
 					<div className="space-y-5">
 						<div className="space-y-3">
 							<Title title={getStepTitle()} />
-							<Description
+							{/* The step existed only to hand out upstream's Discord
+							    invite. Keeping the step but not the invite, so the
+							    dialog still ends where people expect it to. */}
+							<Description description="有问题或者建议，直接在群里说就行" />
+							{/* <Description
 								description={`加入我们的[Discord](${SOCIAL_LINKS.discord})，和大家聊天，分享反馈，一起把OpenCut打造成最好用的编辑器`}
-							/>
+							/> */}
 						</div>
 						<NextButton onClick={handleClose}>完成</NextButton>
 					</div>

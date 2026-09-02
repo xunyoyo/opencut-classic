@@ -5,6 +5,7 @@ import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { useAssetsPanelStore } from "@/components/editor/panels/assets/assets-panel-store";
 import { useEditor } from "@/editor/use-editor";
+import { storeSaturnToken } from "@/saturn/session";
 import {
 	importSaturnView,
 	type ImportProgress,
@@ -69,6 +70,10 @@ function SaturnImport() {
 
 	const runImport = useCallback(async () => {
 		if (!token || !Number.isFinite(viewId)) return;
+
+		// Keep the token for the rest of the tab. Transcription runs later, from
+		// the editor, and by then this URL is gone.
+		storeSaturnToken({ token });
 
 		setState({
 			status: "running",

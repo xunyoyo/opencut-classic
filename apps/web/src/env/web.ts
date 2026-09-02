@@ -53,6 +53,18 @@ const webEnvSchema = z.object({
 		.default(
 			"cdn-saturndf.xiaotuxp.com,saturndf-oss.oss-cn-beijing.aliyuncs.com",
 		),
+	// AI-Saturn's transcription endpoint, relative to SATURN_API_BASE. Only the
+	// proxy route reads it; the flag below is what the browser sees, since the
+	// path itself is no business of the client's.
+	SATURN_TRANSCRIBE_PATH: z.string().default("/project/media/transcribe"),
+	// Polling reuses the generic long-request row reader, which is what the
+	// backend's other async AI operations are polled through.
+	SATURN_TRANSCRIBE_POLL_PATH: z
+		.string()
+		.default("/project/analysis/reqResultPoll"),
+	NEXT_PUBLIC_TRANSCRIPTION_REMOTE_ENABLED: z
+		.enum(["true", "false"])
+		.default("false"),
 });
 
 export type WebEnv = z.infer<typeof webEnvSchema>;

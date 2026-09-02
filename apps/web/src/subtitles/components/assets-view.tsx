@@ -19,6 +19,14 @@ import type {
 	TranscriptionProgress,
 } from "@/transcription/types";
 import { transcriptionService } from "@/services/transcription/service";
+import { transcribeRemote } from "@/services/transcription/remote";
+import { fetchSaturnPoints, type SaturnPoints } from "@/saturn/points";
+import {
+	TRANSCRIPTION_ENGINE_LABELS,
+	getDefaultTranscriptionEngine,
+	isRemoteTranscriptionEnabled,
+	type TranscriptionEngine,
+} from "@/transcription/engines";
 import { decodeAudioToFloat32 } from "@/media/audio";
 import { buildCaptionChunks } from "@/transcription/caption";
 import { insertCaptionChunksAsTextTrack } from "@/subtitles/insert";
@@ -87,6 +95,10 @@ function processingReducer(
 export function Captions() {
 	const [selectedLanguage, setSelectedLanguage] =
 		useState<TranscriptionLanguage>("auto");
+	const [engine, setEngine] = useState<TranscriptionEngine>(
+		getDefaultTranscriptionEngine,
+	);
+	const [points, setPoints] = useState<SaturnPoints | null>(null);
 	const [processing, dispatch] = useReducer(processingReducer, IDLE_STATE);
 	const containerRef = useRef<HTMLDivElement>(null);
 	const fileInputRef = useRef<HTMLInputElement>(null);
@@ -115,6 +127,14 @@ export function Captions() {
 		}
 	};
 
+	// Only meaningful for the online engine, which spends 土豆 per run.
+	useEffect(() => {
+		if (engine !== "remote") return;
+		const controller = new AbortController();
+		void fetchSaturnPoints({ signal: controller.signal }).then(setPoints);
+		return () => controller.abort();
+	}, [engine]);
+
 	const insertCaptions = ({
 		captions,
 	}: {
@@ -133,17 +153,29 @@ export function Captions() {
 				totalDuration: editor.timeline.getTotalDuration(),
 			});
 
-			dispatch({ type: "update_step", step: "准备音频中" });
-			const { samples } = await decodeAudioToFloat32({
-				audioBlob,
-				sampleRate: DEFAULT_TRANSCRIPTION_SAMPLE_RATE,
-			});
-
-			const result = await transcriptionService.transcribe({
-				audioData: samples,
-				language: selectedLanguage === "auto" ? undefined : selectedLanguage,
-				onProgress: handleProgress,
-			});
+			// The remote engine wants a file, so the decode to Float32 samples is
+			// skipped entirely on that path — it is the slowest main-thread step
+			// here and nothing downstream would use the result.
+			const result =
+				engine === "remote"
+					? await transcribeRemote({
+							audioBlob,
+							language: selectedLanguage,
+							onProgress: handleProgress,
+						})
+					: await (async () => {
+							dispatch({ type: "update_step", step: "准备音频中" });
+							const { samples } = await decodeAudioToFloat32({
+								audioBlob,
+								sampleRate: DEFAULT_TRANSCRIPTION_SAMPLE_RATE,
+							});
+							return transcriptionService.transcribe({
+								audioData: samples,
+								language:
+									selectedLanguage === "auto" ? undefined : selectedLanguage,
+								onProgress: handleProgress,
+							});
+						})();
 
 			dispatch({ type: "update_step", step: "生成字幕中" });
 			const captionChunks = buildCaptionChunks({ segments: result.segments });
@@ -154,6 +186,10 @@ export function Captions() {
 			}
 
 			dispatch({ type: "succeed", warnings: [] });
+			// The run just cost 土豆; show what is left rather than a stale figure.
+			if (engine === "remote") {
+				void fetchSaturnPoints().then(setPoints);
+			}
 		} catch (error) {
 			console.error("Transcription failed:", error);
 			dispatch({
@@ -313,7 +349,29 @@ export function Captions() {
 			>
 				<SectionContent className="flex flex-col gap-4 h-full pt-1">
 					<SectionFields>
-						<SectionField label="语言">
+						{isRemoteTranscriptionEnabled() && (
+								<SectionField label="转录方式">
+									<Select
+										value={engine}
+										onValueChange={(value) =>
+											setEngine(value === "remote" ? "remote" : "local")
+										}
+									>
+										<SelectTrigger>
+											<SelectValue />
+										</SelectTrigger>
+										<SelectContent>
+											<SelectItem value="remote">
+												{TRANSCRIPTION_ENGINE_LABELS.remote}
+											</SelectItem>
+											<SelectItem value="local">
+												{TRANSCRIPTION_ENGINE_LABELS.local}
+											</SelectItem>
+										</SelectContent>
+									</Select>
+								</SectionField>
+							)}
+							<SectionField label="语言">
 							<Select
 								value={selectedLanguage}
 								onValueChange={(value) => handleLanguageChange({ value })}
@@ -332,6 +390,13 @@ export function Captions() {
 							</Select>
 						</SectionField>
 					</SectionFields>
+
+					{engine === "remote" && points && (
+						<p className="text-muted-foreground text-xs">
+							可用土豆 {points.available}
+							{points.frozen > 0 && `，冻结中 ${points.frozen}`}
+						</p>
+					)}
 
 					<Button
 						type="button"

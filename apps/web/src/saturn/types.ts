@@ -57,3 +57,81 @@ export function hasRenderedVideo(shot: SaturnShot): shot is RenderedShot {
 		shot.video.storePath.startsWith("http")
 	);
 }
+
+// ---------------------------------------------------------------------------
+// Project + view (场次) types — used by the project/view selector UI
+// ---------------------------------------------------------------------------
+
+/**
+ * Minimal slice of AI-Saturn's ProjectInfo that the selector needs.
+ * Upstream entity: `com.saturndf.project.domain.entity.ProjectInfo`.
+ */
+export const saturnProjectSchema = z.object({
+	projectId: z.number(),
+	projectName: z.string(),
+	/** 1: 剧集, 2: 电影, 3: 漫剧, 99: 其他 */
+	type: z.number().nullish(),
+	logo: z.string().nullish(),
+	summary: z.string().nullish(),
+});
+
+export const saturnProjectListResponseSchema = z.object({
+	code: z.number(),
+	msg: z.string(),
+	/** RuoYi TableDataInfo wraps the list in `rows`. */
+	rows: z.array(saturnProjectSchema).nullish(),
+	/** Some endpoints put the list directly in `data`. */
+	data: z.array(saturnProjectSchema).nullish(),
+});
+
+export type SaturnProject = z.infer<typeof saturnProjectSchema>;
+
+/**
+ * Minimal slice of AI-Saturn's ViewInfo needed by the selector.
+ * Upstream entity: `com.saturndf.project.domain.entity.ViewInfo`.
+ */
+export const saturnViewSchema = z.object({
+	viewId: z.number(),
+	/** Episode number, e.g. 1, 2. */
+	seriesNo: z.number().nullish(),
+	/** Scene number within episode, e.g. 3. */
+	viewNo: z.number().nullish(),
+	/** Free-form suffix like "A", "B". */
+	viewNoSurffix: z.string().nullish(),
+	mainContent: z.string().nullish(),
+	site: z.string().nullish(),
+	/** 0: unfinished, 1: partial, 2: done, 3: deleted */
+	shootStatus: z.number().nullish(),
+});
+
+export type SaturnView = z.infer<typeof saturnViewSchema>;
+
+/**
+ * LoadViewRespVo has a `list` field of LoadViewListRespVo, each of which holds
+ * a `viewList`. We surface only the fields the selector actually needs.
+ */
+export const saturnLoadViewRespVoSchema = z.object({
+	viewId: z.number(),
+	seriesNo: z.number().nullish(),
+	viewNo: z.number().nullish(),
+	viewNoSurffix: z.string().nullish(),
+	mainContent: z.string().nullish(),
+	site: z.string().nullish(),
+	shootStatus: z.number().nullish(),
+});
+
+export const saturnViewListResponseSchema = z.object({
+	code: z.number(),
+	msg: z.string(),
+	data: z
+		.object({
+			list: z
+				.array(
+					z.object({
+						viewList: z.array(saturnLoadViewRespVoSchema).nullish(),
+					}),
+				)
+				.nullish(),
+		})
+		.nullish(),
+});

@@ -24,20 +24,20 @@ const PROPERTY_GROUPS: PropertyGroupDefinition[] = [
 ];
 
 const PROPERTY_LABELS: Partial<Record<string, string>> = {
-	"transform.positionX": "Position X",
-	"transform.positionY": "Position Y",
-	"transform.scaleX": "Scale X",
-	"transform.scaleY": "Scale Y",
-	"transform.rotate": "Rotation",
-	opacity: "Opacity",
-	volume: "Volume",
-	color: "Color",
-	"background.color": "BG Color",
-	"background.paddingX": "BG Pad X",
-	"background.paddingY": "BG Pad Y",
-	"background.offsetX": "BG Offset X",
-	"background.offsetY": "BG Offset Y",
-	"background.cornerRadius": "Corner Radius",
+	"transform.positionX": "位置X",
+	"transform.positionY": "位置Y",
+	"transform.scaleX": "缩放X",
+	"transform.scaleY": "缩放Y",
+	"transform.rotate": "旋转",
+	opacity: "不透明度",
+	volume: "音量",
+	color: "颜色",
+	"background.color": "背景色",
+	"background.paddingX": "背景内边距X",
+	"background.paddingY": "背景内边距Y",
+	"background.offsetX": "背景偏移X",
+	"background.offsetY": "背景偏移Y",
+	"background.cornerRadius": "圆角半径",
 };
 
 export function getPropertyLabel(path: AnimationPath): string {

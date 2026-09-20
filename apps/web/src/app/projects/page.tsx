@@ -82,8 +82,8 @@ const formatProjectDuration = ({
 };
 
 const VIEW_MODE_OPTIONS = [
-	{ mode: "grid" as const, icon: GridViewIcon, label: "Grid view" },
-	{ mode: "list" as const, icon: LeftToRightListDashIcon, label: "List view" },
+	{ mode: "grid" as const, icon: GridViewIcon, label: "网格视图" },
+	{ mode: "list" as const, icon: LeftToRightListDashIcon, label: "列表视图" },
 ];
 
 export default function ProjectsPage() {
@@ -149,14 +149,14 @@ function ProjectsHeader() {
 							<BreadcrumbItem>
 								<BreadcrumbLink asChild>
 									<Link href="/" className="text-sm sm:text-base">
-										Home
+										首页
 									</Link>
 								</BreadcrumbLink>
 							</BreadcrumbItem>
 							<BreadcrumbSeparator />
 							<BreadcrumbItem>
 								<BreadcrumbPage className="text-sm sm:text-base font-medium">
-									All projects
+									所有项目
 								</BreadcrumbPage>
 							</BreadcrumbItem>
 						</BreadcrumbList>
@@ -193,10 +193,10 @@ function ProjectsHeader() {
 }
 
 const SORT_LABELS: Record<TProjectSortKey, string> = {
-	createdAt: "Created",
-	updatedAt: "Modified",
-	name: "Name",
-	duration: "Duration",
+	createdAt: "创建时间",
+	updatedAt: "修改时间",
+	name: "名称",
+	duration: "时长",
 };
 
 function ProjectsToolbar({ projectIds }: { projectIds: string[] }) {
@@ -243,7 +243,7 @@ function ProjectsToolbar({ projectIds }: { projectIds: string[] }) {
 						}
 					/>
 					<span className="text-muted-foreground hidden md:block">
-						Select all
+						全选
 					</span>
 				</Label>
 
@@ -269,7 +269,7 @@ function ProjectsToolbar({ projectIds }: { projectIds: string[] }) {
 							});
 						}
 					}}
-					aria-label={`Sort ${sortOrder === "asc" ? "ascending" : "descending"}`}
+					aria-label={`按${sortOrder === "asc" ? "升序" : "降序"}排序`}
 				>
 					<HugeiconsIcon
 						icon={ArrowDown02Icon}
@@ -331,7 +331,7 @@ function SearchBar({
 						aria-hidden="true"
 					/>
 					<Input
-						placeholder="Search..."
+						placeholder="搜索..."
 						value={searchQuery}
 						onChange={(event) => setSearchQuery({ query: event.target.value })}
 						size="lg"
@@ -346,13 +346,13 @@ function SearchBar({
 const PROJECT_ACTIONS = [
 	{
 		id: "duplicate",
-		label: "Duplicate",
+		label: "创建副本",
 		icon: Copy01Icon,
 		variant: "outline" as const,
 	},
 	{
 		id: "delete",
-		label: "Delete",
+		label: "删除",
 		icon: Delete02Icon,
 		variant: "destructive-foreground" as const,
 	},
@@ -479,25 +479,25 @@ function SortDropdown({ children }: { children: React.ReactNode }) {
 					checked={sortKey === "createdAt"}
 					onCheckedChange={() => setSortKey({ sortKey: "createdAt" })}
 				>
-					Created
+					创建时间
 				</DropdownMenuCheckboxItem>
 				<DropdownMenuCheckboxItem
 					checked={sortKey === "updatedAt"}
 					onCheckedChange={() => setSortKey({ sortKey: "updatedAt" })}
 				>
-					Modified
+					修改时间
 				</DropdownMenuCheckboxItem>
 				<DropdownMenuCheckboxItem
 					checked={sortKey === "name"}
 					onCheckedChange={() => setSortKey({ sortKey: "name" })}
 				>
-					Name
+					名称
 				</DropdownMenuCheckboxItem>
 				<DropdownMenuCheckboxItem
 					checked={sortKey === "duration"}
 					onCheckedChange={() => setSortKey({ sortKey: "duration" })}
 				>
-					Duration
+					时长
 				</DropdownMenuCheckboxItem>
 			</DropdownMenuContent>
 		</DropdownMenu>
@@ -510,7 +510,7 @@ function NewProjectButton() {
 
 	const handleCreateProject = async () => {
 		const projectId = await editor.project.createNewProject({
-			name: "New project",
+			name: "新建项目",
 		});
 		router.push(`/editor/${projectId}`);
 	};
@@ -521,8 +521,8 @@ function NewProjectButton() {
 			className="flex px-5 md:px-6"
 			onClick={handleCreateProject}
 		>
-			<span className="text-sm font-medium hidden md:block">New project</span>
-			<span className="text-sm font-medium block md:hidden">New</span>
+			<span className="text-sm font-medium hidden md:block">新建项目</span>
+			<span className="text-sm font-medium block md:hidden">新建</span>
 		</Button>
 	);
 }
@@ -584,7 +584,7 @@ function ProjectItem({
 					{project.thumbnail ? (
 						<Image
 							src={project.thumbnail}
-							alt="Project thumbnail"
+							alt="项目缩略图"
 							fill
 							className="object-cover"
 						/>
@@ -608,7 +608,7 @@ function ProjectItem({
 				</h3>
 				<div className="text-muted-foreground flex items-center gap-1.5 text-sm">
 					<HugeiconsIcon icon={Calendar04Icon} className="size-4" />
-					<span>Created {formatDate({ date: project.createdAt })}</span>
+					<span>创建于{formatDate({ date: project.createdAt })}</span>
 				</div>
 			</CardContent>
 		</Card>
@@ -620,7 +620,7 @@ function ProjectItem({
 				{project.thumbnail ? (
 					<Image
 						src={project.thumbnail}
-						alt="Project thumbnail"
+						alt="项目缩略图"
 						fill
 						className="object-cover"
 					/>
@@ -777,19 +777,19 @@ function ProjectContextMenuContent({
 				icon={<HugeiconsIcon icon={Edit03Icon} />}
 				onClick={onRenameClick}
 			>
-				Rename
+				重命名
 			</ContextMenuItem>
 			<ContextMenuItem
 				icon={<HugeiconsIcon icon={Copy01Icon} />}
 				onClick={onDuplicateClick}
 			>
-				Duplicate
+				创建副本
 			</ContextMenuItem>
 			<ContextMenuItem
 				icon={<HugeiconsIcon icon={InformationCircleIcon} />}
 				onClick={onInfoClick}
 			>
-				Info
+				信息
 			</ContextMenuItem>
 			<ContextMenuSeparator />
 			<ContextMenuItem
@@ -797,7 +797,7 @@ function ProjectContextMenuContent({
 				icon={<HugeiconsIcon icon={Delete02Icon} />}
 				onClick={onDeleteClick}
 			>
-				Delete
+				删除
 			</ContextMenuItem>
 		</ContextMenuContent>
 	);
@@ -874,7 +874,7 @@ function ProjectMenu({
 							: "!bg-transparent !shadow-none"
 					}
 					size="icon"
-					aria-label="Project menu"
+					aria-label="项目菜单"
 					onClick={(event) =>
 						handleMenuClick({
 							event: event as unknown as MouseEvent<HTMLButtonElement>,
@@ -897,19 +897,19 @@ function ProjectMenu({
 			<DropdownMenuContent className="w-48" align="end">
 				<DropdownMenuItem onClick={handleRename}>
 					<HugeiconsIcon icon={Edit03Icon} />
-					Rename
+					重命名
 				</DropdownMenuItem>
 				<DropdownMenuItem onClick={handleDuplicate}>
 					<HugeiconsIcon icon={Copy01Icon} />
-					Duplicate
+					创建副本
 				</DropdownMenuItem>
 				<DropdownMenuItem onClick={handleInfoClick}>
 					<HugeiconsIcon icon={InformationCircleIcon} />
-					Info
+					信息
 				</DropdownMenuItem>
 				<DropdownMenuItem variant="destructive" onClick={handleDeleteClick}>
 					<HugeiconsIcon icon={Delete02Icon} />
-					Delete
+					删除
 				</DropdownMenuItem>
 			</DropdownMenuContent>
 		</DropdownMenu>
@@ -956,13 +956,13 @@ function EmptyState() {
 	const handleCreateProject = async () => {
 		try {
 			const projectId = await editor.project.createNewProject({
-				name: "New project",
+				name: "新建项目",
 			});
 			router.push(`/editor/${projectId}`);
 		} catch (error) {
-			toast.error("Failed to create project", {
+			toast.error("创建项目失败", {
 				description:
-					error instanceof Error ? error.message : "Please try again",
+					error instanceof Error ? error.message : "请重试",
 			});
 		}
 	};
@@ -976,9 +976,9 @@ function EmptyState() {
 						className="text-muted-foreground size-16 bg-accent/35 border rounded-md p-4"
 					/>
 					<div className="flex flex-col items-center gap-3">
-						<h3 className="text-lg font-medium">No results found</h3>
+						<h3 className="text-lg font-medium">未找到结果</h3>
 						<p className="text-muted-foreground max-w-md">
-							Your search for "{searchQuery}" did not return any results.
+							没有找到与“{searchQuery}”匹配的结果
 						</p>
 					</div>
 				</div>
@@ -987,7 +987,7 @@ function EmptyState() {
 					variant="outline"
 					size="lg"
 				>
-					Clear search
+					清除搜索
 				</Button>
 			</div>
 		);
@@ -1002,15 +1002,14 @@ function EmptyState() {
 						className="text-muted-foreground size-8"
 					/>
 				</div>
-				<h3 className="text-lg font-medium">No projects yet</h3>
+				<h3 className="text-lg font-medium">暂无项目</h3>
 				<p className="text-muted-foreground max-w-md">
-					Start creating your first project. Import media, edit, and export your
-					videos. All privately.
+					创建你的第一个项目，导入素材、编辑并导出视频，完全私密
 				</p>
 			</div>
 			<Button size="lg" className="gap-2" onClick={handleCreateProject}>
 				<HugeiconsIcon icon={PlusSignIcon} />
-				Create your first project
+				创建第一个项目
 			</Button>
 		</div>
 	);

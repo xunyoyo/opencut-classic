@@ -4,6 +4,7 @@ import type { EffectPass } from "@/effects/types";
 import type { BlendMode, Transform } from "@/rendering";
 import { drawMeasuredTextLayout } from "@/text/primitives";
 import type { MeasuredTextElement } from "@/text/measure-element";
+import type { TextStroke } from "@/text/stroke";
 
 export type TextNodeParams = TextElement & {
 	transform: Transform;
@@ -19,6 +20,8 @@ export interface ResolvedTextNodeState {
 	opacity: number;
 	textColor: string;
 	backgroundColor: string;
+	stroke: TextStroke;
+	strokeColor: string;
 	effectPasses: EffectPass[][];
 	measuredText: MeasuredTextElement;
 }
@@ -54,6 +57,7 @@ export function renderTextToContext({
 		textColor: resolved.textColor,
 		background: resolved.measuredText.resolvedBackground,
 		backgroundColor: resolved.backgroundColor,
+		stroke: { ...resolved.stroke, color: resolved.strokeColor },
 		textBaseline: baseline,
 	});
 

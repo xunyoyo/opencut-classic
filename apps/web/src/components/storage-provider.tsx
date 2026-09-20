@@ -49,7 +49,7 @@ export function StorageProvider({ children }: StorageProviderProps) {
 
 				if (!hasSupport) {
 					toast.warning(
-						"Storage not fully supported. Some features may not work.",
+						"存储功能不完全受支持，部分功能可能无法使用",
 					);
 				}
 
@@ -67,7 +67,7 @@ export function StorageProvider({ children }: StorageProviderProps) {
 					isInitialized: false,
 					isLoading: false,
 					hasSupport: storageService.isFullySupported(),
-					error: error instanceof Error ? error.message : "Unknown error",
+					error: error instanceof Error ? error.message : "未知错误",
 				});
 			}
 		};

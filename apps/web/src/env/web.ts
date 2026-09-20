@@ -10,6 +10,25 @@ const webEnvSchema = z.object({
 	NEXT_PUBLIC_SITE_URL: z.url().default("http://localhost:3000"),
 	NEXT_PUBLIC_MARBLE_API_URL: z.url(),
 
+	// Where Whisper weights are downloaded from. Declared here as the single
+	// place env vars are documented, but the transcription worker reads them
+	// straight off process.env — it cannot import this module, which parses the
+	// server-side schema. Point these at your own bucket to stop depending on a
+	// public mirror.
+	NEXT_PUBLIC_TRANSCRIPTION_MODEL_HOST: z
+		.url()
+		.default("https://hf-mirror.com/"),
+	NEXT_PUBLIC_TRANSCRIPTION_MODEL_PATH_TEMPLATE: z.string().optional(),
+
+	// Where webfont stylesheets are loaded from. fonts.googleapis.com and
+	// Google's own fonts.googleapis.cn mirror are both unreachable from the
+	// mainland, so point this at a bucket holding one rewritten stylesheet per
+	// family. Setting it also narrows the picker to the mirrored families —
+	// offering the full atlas would just be a list of fonts that cannot load.
+	// Read off process.env rather than through this module, same as the model
+	// host above.
+	NEXT_PUBLIC_FONT_CSS_BASE: z.url().optional(),
+
 	// Server
 	DATABASE_URL: z.string().refine(
 		(url) =>
@@ -23,6 +42,29 @@ const webEnvSchema = z.object({
 	MARBLE_WORKSPACE_KEY: z.string(),
 	FREESOUND_CLIENT_ID: z.string(),
 	FREESOUND_API_KEY: z.string(),
+
+	// AI-Saturn integration. Both default so existing deployments keep booting
+	// without new env vars; only the import route reads them.
+	SATURN_API_BASE: z.url().default("http://localhost:8080"),
+	// Comma-separated allowlist for the asset proxy. Without it the proxy would
+	// fetch any URL the caller supplies, which is an SSRF hole.
+	SATURN_ASSET_HOSTS: z
+		.string()
+		.default(
+			"cdn-saturndf.xiaotuxp.com,saturndf-oss.oss-cn-beijing.aliyuncs.com",
+		),
+	// AI-Saturn's transcription endpoint, relative to SATURN_API_BASE. Only the
+	// proxy route reads it; the flag below is what the browser sees, since the
+	// path itself is no business of the client's.
+	SATURN_TRANSCRIBE_PATH: z.string().default("/project/media/transcribe"),
+	// Polling reuses the generic long-request row reader, which is what the
+	// backend's other async AI operations are polled through.
+	SATURN_TRANSCRIBE_POLL_PATH: z
+		.string()
+		.default("/project/analysis/reqResultPoll"),
+	NEXT_PUBLIC_TRANSCRIPTION_REMOTE_ENABLED: z
+		.enum(["true", "false"])
+		.default("false"),
 });
 
 export type WebEnv = z.infer<typeof webEnvSchema>;

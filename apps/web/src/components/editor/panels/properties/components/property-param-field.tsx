@@ -14,6 +14,7 @@ import { SectionField } from "@/components/section";
 import { NumberField } from "@/components/ui/number-field";
 import { Switch } from "@/components/ui/switch";
 import { ColorPicker } from "@/components/ui/color-picker";
+import { FontPicker } from "@/components/ui/font-picker";
 import {
 	Select,
 	SelectContent,
@@ -50,7 +51,7 @@ export function PropertyParamField({
 					<KeyframeToggle
 						isActive={keyframe.isActive}
 						isDisabled={keyframe.isDisabled}
-						title={`Toggle ${param.label.toLowerCase()} keyframe`}
+						title={`切换${param.label.toLowerCase()}关键帧`}
 						onToggle={keyframe.onToggle}
 					/>
 				) : undefined
@@ -147,12 +148,17 @@ function ParamInput({
 	}
 
 	if (param.type === "font") {
+		// The mask tab already picks fonts this way; text was left with a bare
+		// text input, so the only way to change it was to type a family name
+		// exactly right. The picker also loads the webfont on select, which the
+		// input never did.
 		return (
-			<input
-				className="border-input bg-accent h-9 w-full rounded-md border px-3 text-sm outline-none"
-				value={String(value)}
-				onChange={(event) => onPreview(event.currentTarget.value)}
-				onBlur={onCommit}
+			<FontPicker
+				defaultValue={String(value)}
+				onValueChange={(family) => {
+					onPreview(family);
+					onCommit();
+				}}
 			/>
 		);
 	}

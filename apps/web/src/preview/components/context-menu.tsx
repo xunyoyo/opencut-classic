@@ -32,8 +32,8 @@ export function PreviewContextMenu({
 		const result = await editor.renderer.copySnapshot();
 
 		if (!result.success) {
-			toast.error("Failed to copy snapshot", {
-				description: result.error ?? "Please try again",
+			toast.error("复制快照失败", {
+				description: result.error ?? "请重试",
 			});
 			return;
 		}
@@ -43,8 +43,8 @@ export function PreviewContextMenu({
 		const result = await editor.renderer.saveSnapshot();
 
 		if (!result.success) {
-			toast.error("Failed to save snapshot", {
-				description: result.error ?? "Please try again",
+			toast.error("保存快照失败", {
+				description: result.error ?? "请重试",
 			});
 			return;
 		}
@@ -53,17 +53,17 @@ export function PreviewContextMenu({
 	return (
 		<ContextMenuContent className="w-56" container={container}>
 			<ContextMenuItem onClick={viewport.fitToScreen} inset>
-				Fit to screen
+				适应屏幕
 			</ContextMenuItem>
 			<ContextMenuSeparator />
 			<ContextMenuItem onClick={onToggleFullscreen} inset>
-				Full screen
+				全屏
 			</ContextMenuItem>
 			<ContextMenuItem onClick={handleSaveSnapshot} inset>
-				Save snapshot
+				保存快照
 			</ContextMenuItem>
 			<ContextMenuItem onClick={handleCopySnapshot} inset>
-				Copy snapshot
+				复制快照
 			</ContextMenuItem>
 			{overlayControls.length > 0 ? <ContextMenuSeparator /> : null}
 			{overlayControls.map((overlayControl) => (

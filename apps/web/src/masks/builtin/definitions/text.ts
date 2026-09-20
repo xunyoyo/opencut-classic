@@ -59,7 +59,7 @@ const TEXT_MASK_PARAMS: ParamDefinition<keyof TextMaskParams & string>[] = [
 	},
 	{
 		key: "fontSize",
-		label: "Size",
+		label: "字号",
 		type: "number",
 		default: 15,
 		min: MIN_FONT_SIZE,
@@ -68,7 +68,7 @@ const TEXT_MASK_PARAMS: ParamDefinition<keyof TextMaskParams & string>[] = [
 	},
 	{
 		key: "rotation",
-		label: "Rotation",
+		label: "旋转",
 		type: "number",
 		default: 0,
 		min: 0,
@@ -77,7 +77,7 @@ const TEXT_MASK_PARAMS: ParamDefinition<keyof TextMaskParams & string>[] = [
 	},
 	{
 		key: "scale",
-		label: "Scale",
+		label: "缩放",
 		type: "number",
 		default: 1,
 		min: 1,
@@ -208,7 +208,7 @@ function computeTextMaskParamUpdate({
 
 export const textMaskDefinition: MaskDefinition<"text"> = {
 	type: "text",
-	name: "Text",
+	name: "文本",
 	features: {
 		hasPosition: true,
 		hasRotation: true,
@@ -351,7 +351,7 @@ export const textMaskDefinition: MaskDefinition<"text"> = {
 				strokeColor: "#ffffff",
 				strokeWidth: 0,
 				strokeAlign: "center",
-				content: "Mask",
+				content: "蒙版",
 				fontSize: 15,
 				fontFamily: "Arial",
 				fontWeight: "normal",

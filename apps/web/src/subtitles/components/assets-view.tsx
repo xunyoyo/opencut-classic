@@ -7,7 +7,7 @@ import {
 	SelectTrigger,
 	SelectValue,
 } from "@/components/ui/select";
-import { useReducer, useRef, useState } from "react";
+import { useEffect, useReducer, useRef, useState } from "react";
 import { extractTimelineAudio } from "@/media/mediabunny";
 import { useEditor } from "@/editor/use-editor";
 import { TRANSCRIPTION_DIAGNOSTICS_SCOPE } from "@/transcription/diagnostics";
@@ -19,6 +19,14 @@ import type {
 	TranscriptionProgress,
 } from "@/transcription/types";
 import { transcriptionService } from "@/services/transcription/service";
+import { transcribeRemote } from "@/services/transcription/remote";
+import { fetchSaturnPoints, type SaturnPoints } from "@/saturn/points";
+import {
+	TRANSCRIPTION_ENGINE_LABELS,
+	getDefaultTranscriptionEngine,
+	isRemoteTranscriptionEnabled,
+	type TranscriptionEngine,
+} from "@/transcription/engines";
 import { decodeAudioToFloat32 } from "@/media/audio";
 import { buildCaptionChunks } from "@/transcription/caption";
 import { insertCaptionChunksAsTextTrack } from "@/subtitles/insert";
@@ -39,6 +47,7 @@ import {
 	TooltipTrigger,
 } from "@/components/ui/tooltip";
 import type { DiagnosticSeverity } from "@/diagnostics/types";
+import { useAssetsPanelStore } from "@/components/editor/panels/assets/assets-panel-store";
 
 const DIAGNOSTIC_BUTTON_VARIANT: Record<
 	DiagnosticSeverity,
@@ -86,10 +95,20 @@ function processingReducer(
 export function Captions() {
 	const [selectedLanguage, setSelectedLanguage] =
 		useState<TranscriptionLanguage>("auto");
+	const [engine, setEngine] = useState<TranscriptionEngine>(
+		getDefaultTranscriptionEngine,
+	);
+	const [points, setPoints] = useState<SaturnPoints | null>(null);
 	const [processing, dispatch] = useReducer(processingReducer, IDLE_STATE);
 	const containerRef = useRef<HTMLDivElement>(null);
 	const fileInputRef = useRef<HTMLInputElement>(null);
 	const editor = useEditor();
+	const pendingAutoCaption = useAssetsPanelStore(
+		(state) => state.pendingAutoCaption,
+	);
+	const clearAutoCaption = useAssetsPanelStore(
+		(state) => state.clearAutoCaption,
+	);
 
 	const isProcessing = processing.status === "processing";
 
@@ -101,12 +120,20 @@ export function Captions() {
 		if (progress.status === "loading-model") {
 			dispatch({
 				type: "update_step",
-				step: `Loading model ${Math.round(progress.progress)}%`,
+				step: `正在加载模型${Math.round(progress.progress)}%`,
 			});
 		} else if (progress.status === "transcribing") {
-			dispatch({ type: "update_step", step: "Transcribing..." });
+			dispatch({ type: "update_step", step: "转录中" });
 		}
 	};
+
+	// Only meaningful for the online engine, which spends 土豆 per run.
+	useEffect(() => {
+		if (engine !== "remote") return;
+		const controller = new AbortController();
+		void fetchSaturnPoints({ signal: controller.signal }).then(setPoints);
+		return () => controller.abort();
+	}, [engine]);
 
 	const insertCaptions = ({
 		captions,
@@ -118,7 +145,7 @@ export function Captions() {
 	};
 
 	const handleGenerateTranscript = async () => {
-		dispatch({ type: "start", step: "Extracting audio..." });
+		dispatch({ type: "start", step: "提取音频中" });
 		try {
 			const audioBlob = await extractTimelineAudio({
 				tracks: editor.scenes.getActiveScene().tracks,
@@ -126,27 +153,43 @@ export function Captions() {
 				totalDuration: editor.timeline.getTotalDuration(),
 			});
 
-			dispatch({ type: "update_step", step: "Preparing audio..." });
-			const { samples } = await decodeAudioToFloat32({
-				audioBlob,
-				sampleRate: DEFAULT_TRANSCRIPTION_SAMPLE_RATE,
-			});
+			// The remote engine wants a file, so the decode to Float32 samples is
+			// skipped entirely on that path — it is the slowest main-thread step
+			// here and nothing downstream would use the result.
+			const result =
+				engine === "remote"
+					? await transcribeRemote({
+							audioBlob,
+							language: selectedLanguage,
+							onProgress: handleProgress,
+						})
+					: await (async () => {
+							dispatch({ type: "update_step", step: "准备音频中" });
+							const { samples } = await decodeAudioToFloat32({
+								audioBlob,
+								sampleRate: DEFAULT_TRANSCRIPTION_SAMPLE_RATE,
+							});
+							return transcriptionService.transcribe({
+								audioData: samples,
+								language:
+									selectedLanguage === "auto" ? undefined : selectedLanguage,
+								onProgress: handleProgress,
+							});
+						})();
 
-			const result = await transcriptionService.transcribe({
-				audioData: samples,
-				language: selectedLanguage === "auto" ? undefined : selectedLanguage,
-				onProgress: handleProgress,
-			});
-
-			dispatch({ type: "update_step", step: "Generating captions..." });
+			dispatch({ type: "update_step", step: "生成字幕中" });
 			const captionChunks = buildCaptionChunks({ segments: result.segments });
 
 			if (!insertCaptions({ captions: captionChunks })) {
-				dispatch({ type: "fail", error: "No captions were generated" });
+				dispatch({ type: "fail", error: "未生成字幕" });
 				return;
 			}
 
 			dispatch({ type: "succeed", warnings: [] });
+			// The run just cost 土豆; show what is left rather than a stale figure.
+			if (engine === "remote") {
+				void fetchSaturnPoints().then(setPoints);
+			}
 		} catch (error) {
 			console.error("Transcription failed:", error);
 			dispatch({
@@ -154,17 +197,34 @@ export function Captions() {
 				error:
 					error instanceof Error
 						? error.message
-						: "An unexpected error occurred",
+						: "发生意外错误",
 			});
 		}
 	};
+
+	// The AI-Saturn importer lands the user directly on this view and wants
+	// captions generated without a click. The ref guard is load-bearing:
+	// handleGenerateTranscript is rebuilt on every render and the flag clears
+	// asynchronously, so without it a re-render mid-download would start a
+	// second transcription on top of the first.
+	const hasAutoStarted = useRef(false);
+	useEffect(() => {
+		if (!pendingAutoCaption || hasAutoStarted.current) return;
+		hasAutoStarted.current = true;
+		clearAutoCaption();
+		void handleGenerateTranscript();
+		// Intentionally keyed on the request flag alone — the ref above already
+		// guarantees a single run, so re-running on handler identity would only
+		// risk duplicate transcriptions.
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [pendingAutoCaption]);
 
 	const handleImportClick = () => {
 		fileInputRef.current?.click();
 	};
 
 	const handleImportFile = async ({ file }: { file: File }) => {
-		dispatch({ type: "start", step: "Reading subtitle file..." });
+		dispatch({ type: "start", step: "读取字幕文件中" });
 		try {
 			const input = await file.text();
 			const result = parseSubtitleFile({
@@ -175,22 +235,22 @@ export function Captions() {
 			if (result.captions.length === 0) {
 				dispatch({
 					type: "fail",
-					error: "No valid subtitle cues were found in the subtitle file",
+					error: "字幕文件中未找到有效字幕",
 				});
 				return;
 			}
 
-			dispatch({ type: "update_step", step: "Importing subtitles..." });
+			dispatch({ type: "update_step", step: "导入字幕中" });
 
 			if (!insertCaptions({ captions: result.captions })) {
-				dispatch({ type: "fail", error: "No captions were generated" });
+				dispatch({ type: "fail", error: "未生成字幕" });
 				return;
 			}
 
 			const nextWarnings = [...result.warnings];
 			if (result.skippedCueCount > 0) {
 				nextWarnings.unshift(
-					`Imported ${result.captions.length} subtitle cue(s) and skipped ${result.skippedCueCount} malformed cue(s).`,
+					`已导入${result.captions.length}条字幕，跳过了${result.skippedCueCount}条格式错误的字幕`,
 				);
 			}
 
@@ -202,7 +262,7 @@ export function Captions() {
 				error:
 					error instanceof Error
 						? error.message
-						: "An unexpected error occurred",
+						: "发生意外错误",
 			});
 		}
 	};
@@ -239,7 +299,7 @@ export function Captions() {
 
 	return (
 		<PanelView
-			title="Captions"
+			title="字幕"
 			contentClassName="px-0 flex flex-col h-full"
 			actions={
 				<TooltipProvider>
@@ -268,7 +328,7 @@ export function Captions() {
 							className="items-center justify-center gap-1.5"
 						>
 							<HugeiconsIcon icon={CloudUploadIcon} />
-							Import
+							导入
 						</Button>
 					</div>
 				</TooltipProvider>
@@ -289,16 +349,38 @@ export function Captions() {
 			>
 				<SectionContent className="flex flex-col gap-4 h-full pt-1">
 					<SectionFields>
-						<SectionField label="Language">
+						{isRemoteTranscriptionEnabled() && (
+								<SectionField label="转录方式">
+									<Select
+										value={engine}
+										onValueChange={(value) =>
+											setEngine(value === "remote" ? "remote" : "local")
+										}
+									>
+										<SelectTrigger>
+											<SelectValue />
+										</SelectTrigger>
+										<SelectContent>
+											<SelectItem value="remote">
+												{TRANSCRIPTION_ENGINE_LABELS.remote}
+											</SelectItem>
+											<SelectItem value="local">
+												{TRANSCRIPTION_ENGINE_LABELS.local}
+											</SelectItem>
+										</SelectContent>
+									</Select>
+								</SectionField>
+							)}
+							<SectionField label="语言">
 							<Select
 								value={selectedLanguage}
 								onValueChange={(value) => handleLanguageChange({ value })}
 							>
 								<SelectTrigger>
-									<SelectValue placeholder="Select a language" />
+									<SelectValue placeholder="选择语言" />
 								</SelectTrigger>
 								<SelectContent>
-									<SelectItem value="auto">Auto detect</SelectItem>
+									<SelectItem value="auto">自动检测</SelectItem>
 									{TRANSCRIPTION_LANGUAGES.map((language) => (
 										<SelectItem key={language.code} value={language.code}>
 											{language.name}
@@ -309,6 +391,13 @@ export function Captions() {
 						</SectionField>
 					</SectionFields>
 
+					{engine === "remote" && points && (
+						<p className="text-muted-foreground text-xs">
+							可用土豆 {points.available}
+							{points.frozen > 0 && `，冻结中 ${points.frozen}`}
+						</p>
+					)}
+
 					<Button
 						type="button"
 						className="mt-auto w-full"
@@ -316,7 +405,7 @@ export function Captions() {
 						disabled={isProcessing || activeDiagnostics.length > 0}
 					>
 						{isProcessing && <Spinner className="mr-1" />}
-						{isProcessing ? processing.step : "Generate transcript"}
+						{isProcessing ? processing.step : "生成转录文本"}
 					</Button>
 					{error && (
 						<div className="bg-destructive/10 border-destructive/20 rounded-md border p-3">

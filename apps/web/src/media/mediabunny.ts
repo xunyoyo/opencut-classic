@@ -136,15 +136,27 @@ function interleaveAudioBuffer({
 	audioBuffer: AudioBuffer;
 }): Float32Array {
 	const numChannels = Math.min(NUM_CHANNELS, audioBuffer.numberOfChannels);
-	const interleavedSamples = new Float32Array(
-		audioBuffer.length * NUM_CHANNELS,
-	);
+	const length = audioBuffer.length;
+	const interleavedSamples = new Float32Array(length * NUM_CHANNELS);
 
-	for (let sampleIndex = 0; sampleIndex < audioBuffer.length; sampleIndex++) {
+	// Resolve each output channel to its source buffer once. getChannelData() is
+	// a Web Audio API call rather than a property read, so leaving it inside the
+	// sample loop costs a JS/C++ boundary crossing per sample per channel — tens
+	// of millions of them for a few minutes of 44.1kHz audio, which blocks the
+	// main thread long enough to freeze the tab.
+	const sourceChannels: Float32Array[] = [];
+	for (let channel = 0; channel < NUM_CHANNELS; channel++) {
+		sourceChannels.push(
+			audioBuffer.getChannelData(
+				Math.min(channel, Math.max(0, numChannels - 1)),
+			),
+		);
+	}
+
+	for (let sampleIndex = 0; sampleIndex < length; sampleIndex++) {
 		for (let channel = 0; channel < NUM_CHANNELS; channel++) {
-			const sourceChannel = Math.min(channel, Math.max(0, numChannels - 1));
 			interleavedSamples[sampleIndex * NUM_CHANNELS + channel] =
-				audioBuffer.getChannelData(sourceChannel)[sampleIndex] ?? 0;
+				sourceChannels[channel][sampleIndex] ?? 0;
 		}
 	}
 

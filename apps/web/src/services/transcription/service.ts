@@ -33,7 +33,7 @@ class TranscriptionService {
 
 		return new Promise((resolve, reject) => {
 			if (!this.worker) {
-				reject(new Error("Worker not initialized"));
+				reject(new Error("转录服务未初始化"));
 				return;
 			}
 
@@ -45,7 +45,7 @@ class TranscriptionService {
 						onProgress?.({
 							status: "transcribing",
 							progress: response.progress,
-							message: "Transcribing audio...",
+							message: "转录音频中",
 						});
 						break;
 
@@ -65,7 +65,7 @@ class TranscriptionService {
 
 					case "cancelled":
 						this.worker?.removeEventListener("message", handleMessage);
-						reject(new Error("Transcription cancelled"));
+						reject(new Error("转录已取消"));
 						break;
 				}
 			};
@@ -108,7 +108,7 @@ class TranscriptionService {
 
 		const model = TRANSCRIPTION_MODELS.find((m) => m.id === modelId);
 		if (!model) {
-			throw new Error(`Unknown model: ${modelId}`);
+			throw new Error(`未知模型：${modelId}`);
 		}
 
 		this.worker = new Worker(new URL("./worker.ts", import.meta.url), {
@@ -117,7 +117,7 @@ class TranscriptionService {
 
 		return new Promise((resolve, reject) => {
 			if (!this.worker) {
-				reject(new Error("Failed to create worker"));
+				reject(new Error("无法启动转录服务"));
 				return;
 			}
 
@@ -129,7 +129,7 @@ class TranscriptionService {
 						onProgress?.({
 							status: "loading-model",
 							progress: response.progress,
-							message: `Loading ${model.name} model...`,
+							message: `正在加载${model.name}模型`,
 						});
 						break;
 

@@ -38,39 +38,39 @@ const createHugeiconsIcon =
 export const tabs = {
 	media: {
 		icon: createHugeiconsIcon({ icon: Folder03Icon }),
-		label: "Media",
+		label: "素材",
 	},
 	sounds: {
 		icon: createHugeiconsIcon({ icon: HeadphonesIcon }),
-		label: "Sounds",
+		label: "音效",
 	},
 	text: {
 		icon: createHugeiconsIcon({ icon: TextIcon }),
-		label: "Text",
+		label: "文本",
 	},
 	stickers: {
 		icon: createHugeiconsIcon({ icon: Happy01Icon }),
-		label: "Stickers",
+		label: "贴纸",
 	},
 	effects: {
 		icon: createHugeiconsIcon({ icon: MagicWand05Icon }),
-		label: "Effects",
+		label: "特效",
 	},
 	transitions: {
 		icon: createHugeiconsIcon({ icon: ArrowRightDoubleIcon }),
-		label: "Transitions",
+		label: "转场",
 	},
 	captions: {
 		icon: createHugeiconsIcon({ icon: ClosedCaptionIcon }),
-		label: "Captions",
+		label: "字幕",
 	},
 	adjustment: {
 		icon: createHugeiconsIcon({ icon: SlidersHorizontalIcon }),
-		label: "Adjustment",
+		label: "调整",
 	},
 	settings: {
 		icon: createHugeiconsIcon({ icon: Settings01Icon }),
-		label: "Settings",
+		label: "设置",
 	},
 } satisfies Record<
 	Tab,
@@ -87,6 +87,14 @@ interface AssetsPanelStore {
 	highlightMediaId: string | null;
 	requestRevealMedia: (mediaId: string) => void;
 	clearHighlight: () => void;
+	/**
+	 * Set when something outside the panel — currently the AI-Saturn importer —
+	 * wants captions generated as soon as the Captions view mounts. Deliberately
+	 * not persisted, so a page reload doesn't re-trigger a model download.
+	 */
+	pendingAutoCaption: boolean;
+	requestAutoCaption: () => void;
+	clearAutoCaption: () => void;
 
 	/* Media */
 	mediaViewMode: MediaViewMode;
@@ -105,6 +113,10 @@ export const useAssetsPanelStore = create<AssetsPanelStore>()(
 			requestRevealMedia: (mediaId) =>
 				set({ activeTab: "media", highlightMediaId: mediaId }),
 			clearHighlight: () => set({ highlightMediaId: null }),
+			pendingAutoCaption: false,
+			requestAutoCaption: () =>
+				set({ activeTab: "captions", pendingAutoCaption: true }),
+			clearAutoCaption: () => set({ pendingAutoCaption: false }),
 			mediaViewMode: "grid",
 			setMediaViewMode: (mode) => set({ mediaViewMode: mode }),
 			mediaSortBy: "name",

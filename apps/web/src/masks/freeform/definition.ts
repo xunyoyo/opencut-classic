@@ -61,7 +61,7 @@ const FREEFORM_PATH_MASK_PARAMS: ParamDefinition<keyof FreeformPathMaskParams & 
 	},
 	{
 		key: "rotation",
-		label: "Rotation",
+		label: "旋转",
 		type: "number",
 		default: 0,
 		min: 0,
@@ -70,7 +70,7 @@ const FREEFORM_PATH_MASK_PARAMS: ParamDefinition<keyof FreeformPathMaskParams & 
 	},
 	{
 		key: "scale",
-		label: "Scale",
+		label: "缩放",
 		type: "number",
 		default: 1,
 		min: 1,
@@ -290,7 +290,7 @@ function computeFreeformParamUpdate({
 
 export const freeformMaskDefinition: MaskDefinition<"freeform"> = {
 	type: "freeform",
-	name: "Pen tool",
+	name: "钢笔工具",
 	features: {
 		hasPosition: true,
 		hasRotation: true,

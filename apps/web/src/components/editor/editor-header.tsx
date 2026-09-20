@@ -6,19 +6,19 @@ import {
 	DropdownMenu,
 	DropdownMenuContent,
 	DropdownMenuItem,
-	DropdownMenuSeparator,
+	// DropdownMenuSeparator,
 	DropdownMenuTrigger,
 } from "../ui/dropdown-menu";
-import Link from "next/link";
+// import Link from "next/link";
 import { RenameProjectDialog } from "@/project/components/rename-project-dialog";
 import { DeleteProjectDialog } from "@/project/components/delete-project-dialog";
 import { useRouter } from "next/navigation";
-import { FaDiscord } from "react-icons/fa6";
+// import { FaDiscord } from "react-icons/fa6";
 import { ExportButton } from "./export-button";
 import { FeedbackPopover } from "@/feedback/components/feedback-popover";
 import { ThemeToggle } from "../theme-toggle";
 import { DEFAULT_LOGO_URL } from "@/site/brand";
-import { SOCIAL_LINKS } from "@/site/social";
+// import { SOCIAL_LINKS } from "@/site/social";
 import { toast } from "sonner";
 import { useEditor } from "@/editor/use-editor";
 import { CommandIcon, Logout05Icon } from "@hugeicons/core-free-icons";
@@ -79,9 +79,8 @@ function ProjectDropdown() {
 					name: newName.trim(),
 				});
 			} catch (error) {
-				toast.error("Failed to rename project", {
-					description:
-						error instanceof Error ? error.message : "Please try again",
+				toast.error("重命名项目失败", {
+					description: error instanceof Error ? error.message : "请重试",
 				});
 			} finally {
 				setOpenDialog(null);
@@ -97,9 +96,8 @@ function ProjectDropdown() {
 				});
 				router.push("/projects");
 			} catch (error) {
-				toast.error("Failed to delete project", {
-					description:
-						error instanceof Error ? error.message : "Please try again",
+				toast.error("删除项目失败", {
+					description: error instanceof Error ? error.message : "请重试",
 				});
 			} finally {
 				setOpenDialog(null);
@@ -114,7 +112,7 @@ function ProjectDropdown() {
 					<Button variant="ghost" size="icon" className="p-1 rounded-sm size-8">
 						<Image
 							src={DEFAULT_LOGO_URL}
-							alt="Project thumbnail"
+							alt="项目缩略图"
 							width={32}
 							height={32}
 							className="invert dark:invert-0 size-5"
@@ -127,17 +125,18 @@ function ProjectDropdown() {
 						disabled={isExiting}
 						icon={<HugeiconsIcon icon={Logout05Icon} />}
 					>
-						Exit project
+						退出项目
 					</DropdownMenuItem>
 
 					<DropdownMenuItem
 						onClick={() => setOpenDialog("shortcuts")}
 						icon={<HugeiconsIcon icon={CommandIcon} />}
 					>
-						Shortcuts
+						快捷键
 					</DropdownMenuItem>
 
-					<DropdownMenuSeparator />
+					{/* Upstream's community Discord, in the editor's own menu. */}
+					{/* <DropdownMenuSeparator />
 
 					<DropdownMenuItem asChild icon={<FaDiscord className="size-4!" />}>
 						<Link
@@ -147,7 +146,7 @@ function ProjectDropdown() {
 						>
 							Discord
 						</Link>
-					</DropdownMenuItem>
+					</DropdownMenuItem> */}
 				</DropdownMenuContent>
 			</DropdownMenu>
 			<RenameProjectDialog
@@ -206,9 +205,8 @@ function EditableProjectName() {
 					name: newName,
 				});
 			} catch (error) {
-				toast.error("Failed to rename project", {
-					description:
-						error instanceof Error ? error.message : "Please try again",
+				toast.error("重命名项目失败", {
+					description: error instanceof Error ? error.message : "请重试",
 				});
 			}
 		}

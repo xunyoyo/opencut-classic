@@ -14,11 +14,11 @@ const getUnsupportedVideoDescription = ({
 }: {
 	codec: VideoFileData["codec"];
 }): string => {
-	const codecLabel = codec ? codec.toUpperCase() : "this video codec";
+	const codecLabel = codec ? codec.toUpperCase() : "该视频编码";
 
 	return codec === "hevc"
-		? `${codecLabel} cannot be decoded in this browser, so this clip may not preview correctly. Convert it to H.264 MP4 or try importing it in Safari.`
-		: `${codecLabel} cannot be decoded in this browser, so this clip may not preview correctly. Convert it to H.264 MP4 and reimport it.`;
+		? `${codecLabel}无法在此浏览器中解码，该片段可能无法正常预览。请转换为H.264 MP4格式，或尝试在Safari中导入`
+		: `${codecLabel}无法在此浏览器中解码，该片段可能无法正常预览。请转换为H.264 MP4格式后重新导入`;
 };
 
 const getStorageLimitDescription = ({
@@ -31,12 +31,12 @@ const getStorageLimitDescription = ({
 	const fileSizeLabel = formatStorageBytes({ bytes: fileSize });
 
 	if (availableBytes === null) {
-		return `File size is ${fileSizeLabel}.`;
+		return `文件大小为${fileSizeLabel}`;
 	}
 
-	return `File size is ${fileSizeLabel}, but only ${formatStorageBytes({
+	return `文件大小为${fileSizeLabel}，但浏览器存储中仅有${formatStorageBytes({
 		bytes: availableBytes,
-	})} is safely available in browser storage.`;
+	})}可安全使用`;
 };
 
 async function generateImageThumbnail({
@@ -99,7 +99,7 @@ export async function processMediaAssets({
 		const fileType = getMediaTypeFromFile({ file });
 
 		if (!fileType) {
-			toast.error(`Unsupported file type: ${file.name}`);
+			toast.error(`不支持的文件类型：${file.name}`);
 			continue;
 		}
 
@@ -108,7 +108,7 @@ export async function processMediaAssets({
 		});
 
 		if (!storageCheck.canStore) {
-			toast.error(`Not enough browser storage for ${file.name}`, {
+			toast.error(`浏览器存储空间不足：${file.name}`, {
 				description: getStorageLimitDescription({
 					fileSize: file.size,
 					availableBytes: storageCheck.availableBytes,
@@ -144,7 +144,7 @@ export async function processMediaAssets({
 					thumbnailUrl = videoData.thumbnailUrl ?? undefined;
 
 					if (!videoData.canDecode) {
-						toast.error(`Can't preview ${file.name}`, {
+						toast.error(`无法预览${file.name}`, {
 							description: getUnsupportedVideoDescription({
 								codec: videoData.codec,
 							}),
@@ -154,9 +154,9 @@ export async function processMediaAssets({
 					const message =
 						error instanceof Error
 							? error.message
-							: "Could not process video";
+							: "无法处理该视频";
 
-					toast.error(`Couldn't process ${file.name}`, {
+					toast.error(`无法处理${file.name}`, {
 						description: message,
 					});
 				}
@@ -186,7 +186,7 @@ export async function processMediaAssets({
 			}
 		} catch (error) {
 			console.error("Error processing file:", file.name, error);
-			toast.error(`Failed to process ${file.name}`);
+			toast.error(`处理失败：${file.name}`);
 			URL.revokeObjectURL(url);
 		}
 	}

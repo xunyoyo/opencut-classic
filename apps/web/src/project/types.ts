@@ -24,6 +24,16 @@ export interface TProjectMetadata {
 	duration: MediaTime;
 	createdAt: Date;
 	updatedAt: Date;
+	/**
+	 * Which AI-Saturn project this editor project was opened from, if any.
+	 *
+	 * Optional and additive: projects created directly in the editor carry no
+	 * upstream owner, and their rows simply lack the field. Kept on metadata
+	 * rather than settings because `loadAllProjectsMetadata` reads metadata
+	 * alone — the draft list can group by upstream project without loading a
+	 * single scene.
+	 */
+	saturnProjectId?: number;
 }
 
 export interface TProjectSettings {

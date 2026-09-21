@@ -213,6 +213,12 @@ class StorageService {
 				}),
 				createdAt: new Date(serializedProject.metadata.createdAt),
 				updatedAt: new Date(serializedProject.metadata.updatedAt),
+				// Rebuilt field by field, so anything not named here is dropped on
+				// every load — the upstream owner has to be carried across
+				// explicitly or the project loses its AI-Saturn link on reload.
+				...(serializedProject.metadata.saturnProjectId !== undefined && {
+					saturnProjectId: serializedProject.metadata.saturnProjectId,
+				}),
 			},
 			scenes,
 			currentSceneId: serializedProject.currentSceneId || "",
@@ -272,6 +278,11 @@ class StorageService {
 				}),
 				createdAt: new Date(serializedProject.metadata.createdAt),
 				updatedAt: new Date(serializedProject.metadata.updatedAt),
+				// Same reason as in loadProject: this is a field-by-field rebuild,
+				// and the draft list filters on the upstream owner.
+				...(serializedProject.metadata.saturnProjectId !== undefined && {
+					saturnProjectId: serializedProject.metadata.saturnProjectId,
+				}),
 			});
 		}
 

@@ -135,3 +135,122 @@ export const saturnViewListResponseSchema = z.object({
 		})
 		.nullish(),
 });
+
+// ---------------------------------------------------------------------------
+// Project-wide shot metadata — the one-shot prefetch that backs /saturn-open
+// ---------------------------------------------------------------------------
+
+/**
+ * Mirrors the backend's `ProjectShotDto`.
+ *
+ * This deliberately carries no media bytes: the whole point is that a project's
+ * structure is a few hundred KB of JSON while its shots are tens of GB, so the
+ * editor prefetches the former and pulls the latter per clip on demand. The
+ * `videoUrl` here is the CDN address to hand to `/api/saturn/asset`.
+ */
+export interface SaturnProjectShot {
+	shotId: number;
+	viewId?: number | null;
+	seriesNo?: number | null;
+	viewNo?: number | null;
+	viewNoSurffix?: string | null;
+	shotNo?: string | null;
+	/** Planned duration in seconds — may disagree with the rendered video. */
+	duration?: number | null;
+	content?: string | null;
+	dialogue?: string | null;
+	videoDescription?: string | null;
+	shotSize?: string | null;
+	cameraMovement?: string | null;
+	angle?: string | null;
+	site?: string | null;
+	transition?: string | null;
+	soundEffect?: string | null;
+	videoUrl?: string | null;
+	videoSuffix?: string | null;
+	videoName?: string | null;
+	firstFrameId?: number | null;
+	lastFrameId?: number | null;
+	type?: number | null;
+	parentShotId?: number | null;
+	subShots?: SaturnProjectShot[] | null;
+}
+
+// Annotated rather than inferred: the schema refers to itself through
+// `subShots`, which TypeScript cannot infer without the explicit type argument.
+export const saturnProjectShotSchema: z.ZodType<SaturnProjectShot> = z.object({
+	shotId: z.number(),
+	viewId: z.number().nullish(),
+	seriesNo: z.number().nullish(),
+	viewNo: z.number().nullish(),
+	viewNoSurffix: z.string().nullish(),
+	shotNo: z.string().nullish(),
+	duration: z.number().nullish(),
+	content: z.string().nullish(),
+	dialogue: z.string().nullish(),
+	videoDescription: z.string().nullish(),
+	shotSize: z.string().nullish(),
+	cameraMovement: z.string().nullish(),
+	angle: z.string().nullish(),
+	site: z.string().nullish(),
+	transition: z.string().nullish(),
+	soundEffect: z.string().nullish(),
+	videoUrl: z.string().nullish(),
+	videoSuffix: z.string().nullish(),
+	videoName: z.string().nullish(),
+	firstFrameId: z.number().nullish(),
+	lastFrameId: z.number().nullish(),
+	type: z.number().nullish(),
+	parentShotId: z.number().nullish(),
+	get subShots() {
+		return z.array(saturnProjectShotSchema).nullish();
+	},
+});
+
+export const saturnProjectShotsResponseSchema = z.object({
+	code: z.number(),
+	msg: z.string(),
+	data: z.array(saturnProjectShotSchema).nullish(),
+});
+
+/** True when the shot has a rendered video the editor can actually download. */
+export function hasProjectShotVideo(
+	shot: SaturnProjectShot,
+): shot is SaturnProjectShot & { videoUrl: string } {
+	return (
+		typeof shot.videoUrl === "string" && shot.videoUrl.startsWith("http")
+	);
+}
+
+/**
+ * Depth-first flatten of the shot tree.
+ *
+ * The backend returns sub-shots nested under their parent, so counting the
+ * top-level array undercounts. Order is preserved: a parent is emitted before
+ * its children, which is the order they should land on a timeline.
+ */
+export function flattenProjectShots(
+	shots: SaturnProjectShot[],
+): SaturnProjectShot[] {
+	const flat: SaturnProjectShot[] = [];
+	const walk = (list: SaturnProjectShot[]) => {
+		for (const shot of list) {
+			flat.push(shot);
+			if (shot.subShots?.length) walk(shot.subShots);
+		}
+	};
+	walk(shots);
+	return flat;
+}
+
+/** "第1集 · 第3A场" — the label AI-Saturn itself shows for a 场次. */
+export function projectShotViewLabel(shot: SaturnProjectShot): string {
+	const episode = shot.seriesNo != null ? `第${shot.seriesNo}集` : "";
+	const scene =
+		shot.viewNo != null
+			? `第${shot.viewNo}${shot.viewNoSurffix ?? ""}场`
+			: shot.viewId != null
+				? `场次 ${shot.viewId}`
+				: "";
+	return [episode, scene].filter(Boolean).join(" · ");
+}

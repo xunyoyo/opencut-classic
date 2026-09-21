@@ -10,6 +10,8 @@ import { useKeybindingsStore } from "@/actions/keybindings-store";
 import { useTimelineStore } from "@/timeline/timeline-store";
 import { useEditorActions } from "@/actions/use-editor-actions";
 import { loadFontAtlas } from "@/fonts/google-fonts";
+import { consumePendingOpen, takeShotHandoff } from "@/saturn/project-shots";
+import { buildPlaceholderTimeline } from "@/saturn/placeholders";
 import {
 	initializeGpuRenderer,
 	isGpuAvailable,
@@ -19,6 +21,12 @@ interface EditorProviderProps {
 	projectId: string;
 	children: React.ReactNode;
 }
+
+/**
+ * Marks a project id that does not exist yet and should be created on arrival.
+ * See /saturn-open — the landing page cannot create projects itself.
+ */
+const PENDING_ID_PREFIX = "new-";
 
 export function EditorProvider({ projectId, children }: EditorProviderProps) {
 	const activeProject = useEditor((e) => e.project.getActiveOrNull());
@@ -55,10 +63,32 @@ export function EditorProvider({ projectId, children }: EditorProviderProps) {
 						err.message.includes("does not exist"));
 
 				if (isNotFound) {
+					// The landing page routes a not-yet-created AI-Saturn project
+					// here as `new-<saturnProjectId>`. Only that shape creates a
+					// project: a mistyped id should not silently spawn one.
+					const pending = projectId.startsWith(PENDING_ID_PREFIX)
+						? consumePendingOpen()
+						: null;
+
 					try {
 						const newProjectId = await editor.project.createNewProject({
-							name: "无标题项目",
+							name: pending?.projectName ?? "无标题项目",
+							saturnProjectId: pending?.saturnProjectId,
 						});
+
+						// Lay the prefetched project out as placeholder clips, so the
+						// user lands on their whole cut rather than an empty scene.
+						const shots =
+							pending !== null
+								? takeShotHandoff({
+										saturnProjectId: pending.saturnProjectId,
+									})
+								: null;
+						if (shots?.length) {
+							buildPlaceholderTimeline({ editor, shots });
+							await editor.project.saveCurrentProject();
+						}
+
 						router.replace(`/editor/${newProjectId}`);
 					} catch (_createErr) {
 						setError("创建项目失败");

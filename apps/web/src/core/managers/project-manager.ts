@@ -79,7 +79,14 @@ export class ProjectManager {
 		await this.storageMigrationPromise;
 	}
 
-	async createNewProject({ name }: { name: string }): Promise<string> {
+	async createNewProject({
+		name,
+		saturnProjectId,
+	}: {
+		name: string;
+		/** Set when the project is opened from an AI-Saturn project. */
+		saturnProjectId?: number;
+	}): Promise<string> {
 		const mainScene = buildDefaultScene({ name: "主场景", isMain: true });
 		const newProject: TProject = {
 			metadata: {
@@ -88,6 +95,10 @@ export class ProjectManager {
 				duration: getProjectDurationFromScenes({ scenes: [mainScene] }),
 				createdAt: new Date(),
 				updatedAt: new Date(),
+				// Spread conditionally rather than writing `saturnProjectId:
+				// undefined` — the latter would serialize into IndexedDB as an
+				// explicit null and show up in every locally-created project.
+				...(saturnProjectId !== undefined && { saturnProjectId }),
 			},
 			scenes: [mainScene],
 			currentSceneId: mainScene.id,

@@ -144,6 +144,75 @@ export function listShotPrefetches(): SaturnShotPrefetch[] {
 }
 
 // ---------------------------------------------------------------------------
+// Placeholder ↔ shot mapping
+// ---------------------------------------------------------------------------
+
+/**
+ * Which shot each placeholder clip came from.
+ *
+ * The timeline is the user's to rearrange, so the mapping cannot be recomputed
+ * from ordering — a moved or deleted clip would shift every later index. It is
+ * stored per element id instead, which survives rearrangement and is the same
+ * key the editor already uses everywhere.
+ *
+ * Kept out of the element's own `params` deliberately: those are the fields the
+ * properties panel exposes for editing, and an internal bookkeeping value
+ * living among them would show up in the UI and be editable by accident.
+ */
+export interface SaturnClipLink {
+	shotId: number;
+	/** CDN address of the rendered video, absent while the shot is unrendered. */
+	videoUrl: string | null;
+	videoSuffix: string | null;
+	videoName: string | null;
+	shotNo: string | null;
+}
+
+const clipLinkSchema: z.ZodType<SaturnClipLink> = z.object({
+	shotId: z.number(),
+	videoUrl: z.string().nullish().transform((value) => value ?? null),
+	videoSuffix: z.string().nullish().transform((value) => value ?? null),
+	videoName: z.string().nullish().transform((value) => value ?? null),
+	shotNo: z.string().nullish().transform((value) => value ?? null),
+});
+
+const CLIP_LINKS_KEY_PREFIX = "saturn-clip-links:";
+
+export function saveClipLinks({
+	projectId,
+	links,
+}: {
+	projectId: string;
+	links: Record<string, SaturnClipLink>;
+}): void {
+	try {
+		localStorage.setItem(
+			`${CLIP_LINKS_KEY_PREFIX}${projectId}`,
+			JSON.stringify(links),
+		);
+	} catch {
+		// Losing this only costs the per-clip "replace with video" action; the
+		// timeline itself is intact.
+	}
+}
+
+export function loadClipLinks({
+	projectId,
+}: {
+	projectId: string;
+}): Record<string, SaturnClipLink> {
+	try {
+		const raw = localStorage.getItem(`${CLIP_LINKS_KEY_PREFIX}${projectId}`);
+		if (!raw) return {};
+
+		const parsed = z.record(z.string(), clipLinkSchema).safeParse(JSON.parse(raw));
+		return parsed.success ? parsed.data : {};
+	} catch {
+		return {};
+	}
+}
+
+// ---------------------------------------------------------------------------
 // Pending open
 // ---------------------------------------------------------------------------
 

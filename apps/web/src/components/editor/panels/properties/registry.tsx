@@ -23,6 +23,7 @@ import {
 	DashboardSpeed02Icon,
 } from "@hugeicons/core-free-icons";
 import { ElementParamsTab } from "./components/element-params-tab";
+import { SaturnClipSection } from "./saturn-clip-section";
 import { ClipEffectsTab, StandaloneEffectTab } from "@/effects/components/effects-tab";
 import { MasksTab } from "@/masks/components/masks-tab";
 import { SpeedTab } from "@/speed/components/speed-tab";
@@ -182,12 +183,16 @@ function buildTextTab({ element }: { element: TextElement }): PropertiesTabDef {
 		label: "文本",
 		icon: <HugeiconsIcon icon={TextFontIcon} size={16} />,
 		content: ({ trackId }) => (
-			<ElementParamsTab
-				element={element}
-				trackId={trackId}
-				paramKeys={TEXT_PARAM_KEYS}
-				sectionKey="text"
-			/>
+			<>
+				{/* Renders nothing unless this clip is an AI-Saturn placeholder. */}
+				<SaturnClipSection element={element} />
+				<ElementParamsTab
+					element={element}
+					trackId={trackId}
+					paramKeys={TEXT_PARAM_KEYS}
+					sectionKey="text"
+				/>
+			</>
 		),
 	};
 }

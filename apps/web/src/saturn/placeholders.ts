@@ -2,6 +2,8 @@ import { buildTextElement } from "@/timeline/element-utils";
 import { toElementDurationTicks } from "@/timeline/creation";
 import { ZERO_MEDIA_TIME, addMediaTime, type MediaTime } from "@/wasm";
 import type { EditorCore } from "@/core";
+import { InsertElementCommand } from "@/commands/timeline/element";
+import type { SaturnClipLink } from "./project-shots";
 import {
 	flattenProjectShots,
 	projectShotViewLabel,
@@ -23,6 +25,10 @@ import {
  * Text rather than an empty video element on purpose: a video element with no
  * mediaId renders nothing and is not obviously actionable, whereas text shows
  * the shot's content and dialogue where the picture will go.
+ *
+ * Returns the element-id → shot mapping, because the element ids are generated
+ * inside the insert command and are the only stable way back to the shot once
+ * the user starts moving clips around.
  */
 export function buildPlaceholderTimeline({
 	editor,
@@ -30,39 +36,48 @@ export function buildPlaceholderTimeline({
 }: {
 	editor: EditorCore;
 	shots: SaturnProjectShot[];
-}): number {
+}): Record<string, SaturnClipLink> {
 	const flat = flattenProjectShots(shots);
-	if (flat.length === 0) return 0;
+	if (flat.length === 0) return {};
 
 	const mainTrackId = editor.scenes.getActiveScene().tracks.main.id;
+	const links: Record<string, SaturnClipLink> = {};
 
 	let cursor: MediaTime = ZERO_MEDIA_TIME;
-	let inserted = 0;
 
 	// Sequential on purpose: each insert advances the cursor that positions the
 	// next shot, which is what butts the clips against each other in order.
 	for (const shot of flat) {
 		const duration = toElementDurationTicks({ seconds: shot.duration });
 
-		editor.timeline.insertElement({
+		// Built as a command rather than through `editor.timeline.insertElement`
+		// so the generated element id is reachable — the timeline manager only
+		// executes the command and discards it.
+		const command = new InsertElementCommand({
 			element: buildTextElement({
 				raw: {
 					name: shotLabel(shot),
 					duration,
-					// Set at insert time; the cursor below is advanced separately.
-					startTime: cursor,
 					params: { content: placeholderContent(shot) },
 				},
 				startTime: cursor,
 			}),
 			placement: { mode: "explicit", trackId: mainTrackId },
 		});
+		editor.command.execute({ command });
+
+		links[command.getElementId()] = {
+			shotId: shot.shotId,
+			videoUrl: shot.videoUrl ?? null,
+			videoSuffix: shot.videoSuffix ?? null,
+			videoName: shot.videoName ?? null,
+			shotNo: shot.shotNo ?? null,
+		};
 
 		cursor = addMediaTime({ a: cursor, b: duration });
-		inserted += 1;
 	}
 
-	return inserted;
+	return links;
 }
 
 /** "第1集 · 第3A场 · 镜2A" */

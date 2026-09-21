@@ -10,7 +10,7 @@ import { useKeybindingsStore } from "@/actions/keybindings-store";
 import { useTimelineStore } from "@/timeline/timeline-store";
 import { useEditorActions } from "@/actions/use-editor-actions";
 import { loadFontAtlas } from "@/fonts/google-fonts";
-import { consumePendingOpen, takeShotHandoff } from "@/saturn/project-shots";
+import { consumePendingOpen, saveClipLinks, takeShotHandoff } from "@/saturn/project-shots";
 import { buildPlaceholderTimeline } from "@/saturn/placeholders";
 import {
 	initializeGpuRenderer,
@@ -85,7 +85,8 @@ export function EditorProvider({ projectId, children }: EditorProviderProps) {
 									})
 								: null;
 						if (shots?.length) {
-							buildPlaceholderTimeline({ editor, shots });
+							const links = buildPlaceholderTimeline({ editor, shots });
+							saveClipLinks({ projectId: newProjectId, links });
 							await editor.project.saveCurrentProject();
 						}
 

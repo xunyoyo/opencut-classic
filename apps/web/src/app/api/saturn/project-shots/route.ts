@@ -1,5 +1,6 @@
 import { webEnv } from "@/env/web";
 import { type NextRequest, NextResponse } from "next/server";
+import { rewriteShotTreeAssetUrls } from "../asset-origin";
 
 /**
  * Proxies AI-Saturn's project-wide shot metadata.
@@ -41,7 +42,17 @@ export async function GET(request: NextRequest) {
 			);
 		}
 
-		return NextResponse.json(await response.json());
+		const payload = await response.json();
+
+		// Upstream `videoUrl` is whatever host was configured when the shot was
+		// rendered — raw OSS for anything predating the CDN cutover. Rewritten
+		// here so the client only ever sees the one origin we serve from; see
+		// asset-origin.ts.
+		if (Array.isArray(payload?.data)) {
+			rewriteShotTreeAssetUrls(payload.data);
+		}
+
+		return NextResponse.json(payload);
 	} catch (error) {
 		console.error("Failed to reach AI-Saturn for project shots:", error);
 		return NextResponse.json(

@@ -1,5 +1,6 @@
 import { webEnv } from "@/env/web";
 import { type NextRequest, NextResponse } from "next/server";
+import { toPublicAssetUrl } from "../asset-origin";
 
 /**
  * Proxies AI-Saturn media files so the browser can read them as blobs.
@@ -39,12 +40,23 @@ export async function GET(request: NextRequest) {
 	// Without this check the route would fetch any URL a caller supplies,
 	// including private addresses reachable from the server. The allowlist is
 	// the whole security boundary here.
+	//
+	// Checked against the caller's URL rather than the rewritten one: the
+	// rewrite only ever moves between allowlisted hosts, so testing the input
+	// keeps this a single gate on what was actually asked for.
 	if (target.protocol !== "https:" || !allowedHosts.has(target.hostname)) {
 		return NextResponse.json({ error: "Host not allowed" }, { status: 403 });
 	}
 
+	// Callers normally pass an already-rewritten URL from the shot metadata.
+	// Older paths that hold an upstream `storePath` verbatim land here instead,
+	// so the fetch itself is pinned to the serving origin too — otherwise those
+	// requests would keep going to whichever host the shot happened to be
+	// uploaded through.
+	const fetchUrl = toPublicAssetUrl(target.toString());
+
 	try {
-		const upstream = await fetch(target, { cache: "no-store" });
+		const upstream = await fetch(fetchUrl, { cache: "no-store" });
 
 		if (!upstream.ok || !upstream.body) {
 			return NextResponse.json(

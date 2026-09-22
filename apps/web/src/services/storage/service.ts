@@ -153,6 +153,16 @@ class StorageService {
 				duration,
 				createdAt: project.metadata.createdAt.toISOString(),
 				updatedAt: project.metadata.updatedAt.toISOString(),
+				// Carried explicitly: this method enumerates every field by hand,
+				// so any new TProjectMetadata field must be listed here or it is
+				// silently dropped on every save. loadProject and
+				// loadAllProjectsMetadata have the same list and must be kept in sync.
+				...(project.metadata.saturnProjectId !== undefined && {
+					saturnProjectId: project.metadata.saturnProjectId,
+				}),
+				...(project.metadata.saturnLaidOut !== undefined && {
+					saturnLaidOut: project.metadata.saturnLaidOut,
+				}),
 			},
 			scenes: serializedScenes,
 			currentSceneId: project.currentSceneId,
@@ -219,6 +229,9 @@ class StorageService {
 				...(serializedProject.metadata.saturnProjectId !== undefined && {
 					saturnProjectId: serializedProject.metadata.saturnProjectId,
 				}),
+				...(serializedProject.metadata.saturnLaidOut !== undefined && {
+					saturnLaidOut: serializedProject.metadata.saturnLaidOut,
+				}),
 			},
 			scenes,
 			currentSceneId: serializedProject.currentSceneId || "",
@@ -282,6 +295,9 @@ class StorageService {
 				// and the draft list filters on the upstream owner.
 				...(serializedProject.metadata.saturnProjectId !== undefined && {
 					saturnProjectId: serializedProject.metadata.saturnProjectId,
+				}),
+				...(serializedProject.metadata.saturnLaidOut !== undefined && {
+					saturnLaidOut: serializedProject.metadata.saturnLaidOut,
 				}),
 			});
 		}

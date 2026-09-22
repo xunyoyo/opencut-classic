@@ -53,6 +53,18 @@ const webEnvSchema = z.object({
 		.default(
 			"cdn-saturndf.xiaotuxp.com,saturndf-oss.oss-cn-beijing.aliyuncs.com",
 		),
+	// Origin every asset URL is rewritten onto before it leaves our server.
+	//
+	// `store_path` is a snapshot of whatever domain was configured at upload
+	// time, so the same bucket is addressed through several hosts: uploads
+	// before September 2026 are on the raw OSS endpoint, later ones on the CDN.
+	// Both resolve to the same object, and which one to serve is a hosting
+	// decision rather than a property of the file — so it belongs here, at the
+	// boundary, instead of being baked into the database or the stored
+	// timeline. Empty means "leave upstream URLs alone".
+	SATURN_ASSET_PUBLIC_BASE: z
+		.string()
+		.default("https://cdn-saturndf.xiaotuxp.com"),
 	// AI-Saturn's transcription endpoint, relative to SATURN_API_BASE. Only the
 	// proxy route reads it; the flag below is what the browser sees, since the
 	// path itself is no business of the client's.

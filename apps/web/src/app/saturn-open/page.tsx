@@ -13,7 +13,7 @@ import {
 	setShotHandoff,
 	type SaturnShotPrefetch,
 } from "@/saturn/project-shots";
-import { flattenProjectShots } from "@/saturn/types";
+import { projectShotSegments } from "@/saturn/types";
 import { storageService } from "@/services/storage/service";
 import type { TProjectMetadata } from "@/project/types";
 
@@ -202,10 +202,28 @@ function SaturnOpen() {
 
 			try {
 				const shots = await fetchSaturnProjectShots({ token });
-				const flat = flattenProjectShots(shots);
+				// Counted in segments, not nodes: a container shot and the sub-shots
+				// inside it are one stretch of picture, and only one of the two
+				// carries the render.
+				const segments = projectShotSegments(shots);
 
-				if (flat.length === 0) {
+				if (segments.length === 0) {
 					throw new Error("该项目还没有分镜，请先在 AI-Saturn 生成分镜");
+				}
+
+				// Refused before creating anything. The timeline is built from the
+				// shots that have a render, so a project with none of them would be
+				// laid out as an empty scene and stamped as complete — every later
+				// visit would reuse that husk and the user would never see their
+				// footage. Far better to say so here and let them come back when
+				// there is something to cut.
+				const rendered = segments.filter(
+					(shot) => typeof shot.videoUrl === "string" && shot.videoUrl.length > 0,
+				);
+				if (rendered.length === 0) {
+					throw new Error(
+						"该项目还没有生成好的成片，请先在 AI-Saturn 完成生成",
+					);
 				}
 
 				const projectName =
@@ -216,7 +234,7 @@ function SaturnOpen() {
 					projectName,
 					fetchedAt: new Date().toISOString(),
 					shots,
-					totalCount: flat.length,
+					totalCount: rendered.length,
 				});
 
 				setState({ status: "working", label: "正在打开草稿…" });
@@ -224,9 +242,21 @@ function SaturnOpen() {
 				// Reuse the draft this project was last opened with rather than
 				// creating a second one on every visit — the editor project holds
 				// the user's actual timeline work.
+				//
+				// Only drafts whose timeline was actually laid out count. A project
+				// record is created before the placeholders go in, so a failure in
+				// between leaves a real project with an empty scene; reusing that
+				// husk would strand the user on a permanently empty timeline.
+				//
+				// The stamp, not duration: every save recomputes duration from the
+				// live scenes, so a user who deleted all their clips would look
+				// exactly like a project that was never built — and would silently
+				// get a second draft forked off their work.
 				const all = await storageService.loadAllProjectsMetadata();
 				const existing = all
-					.filter((p) => p.saturnProjectId === targetProjectId)
+					.filter(
+						(p) => p.saturnProjectId === targetProjectId && p.saturnLaidOut,
+					)
 					.sort(
 						(a, b) =>
 							new Date(b.updatedAt).getTime() -

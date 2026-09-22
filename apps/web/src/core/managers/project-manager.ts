@@ -137,6 +137,20 @@ export class ProjectManager {
 	}
 
 	async loadProject({ id }: { id: string }): Promise<void> {
+		// Already the active project — nothing to load, and loading is
+		// destructive: it clears the scenes and media assets before reading the
+		// record back.
+		//
+		// This guards the create path, which inserts a project's whole timeline
+		// and then navigates to it. React StrictMode runs that effect twice, and
+		// the second run re-enters here while the project it just created is
+		// already active — with the scenes built in memory and the save not yet
+		// written. Clearing then would wipe the timeline that was never
+		// persisted, leaving a project that is stamped as laid out but empty.
+		if (this.active?.metadata.id === id) {
+			return;
+		}
+
 		if (!this.isInitialized) {
 			this.isLoading = true;
 			this.notify();
@@ -616,6 +630,24 @@ export class ProjectManager {
 	 */
 	getActiveOrNull(): TProject | null {
 		return this.active;
+	}
+
+	/**
+	 * Records that the AI-Saturn shot list has been laid out onto the active
+	 * project's timeline.
+	 *
+	 * Set on the in-memory project only; the caller saves afterwards. That is
+	 * deliberate — the layout and this stamp have to land in the same write, or
+	 * a crash between them would leave a project that looks laid out but is
+	 * empty. The landing page treats an unstamped draft as "not built yet" and
+	 * rebuilds it.
+	 */
+	markSaturnLayoutComplete(): void {
+		if (!this.active) return;
+		this.active = {
+			...this.active,
+			metadata: { ...this.active.metadata, saturnLaidOut: true },
+		};
 	}
 
 	getTimelineViewState(): TTimelineViewState {

@@ -34,6 +34,22 @@ export interface TProjectMetadata {
 	 * single scene.
 	 */
 	saturnProjectId?: number;
+	/**
+	 * Stamped once the AI-Saturn shot list has actually been laid out onto this
+	 * project's timeline.
+	 *
+	 * A project record is created before the placeholders are inserted, so a
+	 * failure in between leaves a real, reusable project with an empty scene.
+	 * The landing page needs to tell that husk from a draft the user has
+	 * genuinely built, and duration cannot answer it: every save recomputes
+	 * duration from the live scenes, so a user who deletes all their clips
+	 * would look identical to a project that never got built.
+	 *
+	 * Absent means "never laid out". Set once, never cleared — clearing the
+	 * timeline later is the user's choice and must not send them back through
+	 * the creation path.
+	 */
+	saturnLaidOut?: true;
 }
 
 export interface TProjectSettings {

@@ -227,7 +227,10 @@ export function hasProjectShotVideo(
  *
  * The backend returns sub-shots nested under their parent, so counting the
  * top-level array undercounts. Order is preserved: a parent is emitted before
- * its children, which is the order they should land on a timeline.
+ * its children.
+ *
+ * This is the "what shots exist" walk, used for counts. For what actually goes
+ * on the timeline, see projectShotSegments — the two differ by the containers.
  */
 export function flattenProjectShots(
 	shots: SaturnProjectShot[],
@@ -241,6 +244,45 @@ export function flattenProjectShots(
 	};
 	walk(shots);
 	return flat;
+}
+
+/**
+ * The shots that are each one segment of picture, in play order.
+ *
+ * One rule: a shot that has a rendered video is a segment. Everything without
+ * one still gets a placeholder clip, so the cut's shape is visible before the
+ * renders land — that is the whole point of laying the project out up front.
+ *
+ * The parent/child structure matters for exactly one reason: not counting the
+ * same stretch of picture twice. A shot with sub-shots is one prompt of up to
+ * ~15s written as a parent row plus the frames inside it, and the children's
+ * durations sum to the parent's
+ * (`AI-Saturn-AI-ability/app/models/storyboard.py`, `_validate_timecode_alignment`).
+ * AI-Saturn renders that prompt either as one video on the parent (分镜模式) or
+ * as one video per child (快捷模式, the default) — never both. So descending
+ * into the children only when the parent has no video picks the level that
+ * actually carries the picture, and a parent that has one is left as a single
+ * 15s segment instead of three stubs.
+ *
+ * Exists alongside flattenProjectShots because they answer different questions:
+ * that one is "what shots exist" (counts, the API contract), this is "what goes
+ * on the timeline".
+ */
+export function projectShotSegments(
+	shots: SaturnProjectShot[],
+): SaturnProjectShot[] {
+	const segments: SaturnProjectShot[] = [];
+	const walk = (list: SaturnProjectShot[]) => {
+		for (const shot of list) {
+			if (shot.subShots?.length && !hasProjectShotVideo(shot)) {
+				walk(shot.subShots);
+			} else {
+				segments.push(shot);
+			}
+		}
+	};
+	walk(shots);
+	return segments;
 }
 
 /** "第1集 · 第3A场" — the label AI-Saturn itself shows for a 场次. */

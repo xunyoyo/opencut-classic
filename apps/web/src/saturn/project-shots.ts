@@ -144,71 +144,55 @@ export function listShotPrefetches(): SaturnShotPrefetch[] {
 }
 
 // ---------------------------------------------------------------------------
-// Placeholder ↔ shot mapping
+// Which shots already have their video in the media library
 // ---------------------------------------------------------------------------
 
 /**
- * Which shot each placeholder clip came from.
+ * Records the shots whose rendered video has already been imported.
  *
- * The timeline is the user's to rearrange, so the mapping cannot be recomputed
- * from ordering — a moved or deleted clip would shift every later index. It is
- * stored per element id instead, which survives rearrangement and is the same
- * key the editor already uses everywhere.
+ * Kept here rather than on the media asset: a MediaAsset carries no upstream
+ * identity, so without this list there is nothing to compare a shot against and
+ * every re-entry would download the whole project again. Shots are also the unit
+ * the rest of this integration addresses.
  *
- * Kept out of the element's own `params` deliberately: those are the fields the
- * properties panel exposes for editing, and an internal bookkeeping value
- * living among them would show up in the UI and be editable by accident.
+ * Scoped per editor project rather than per Saturn project, because the assets
+ * live in that project's own OPFS directory — deleting the draft takes its media
+ * with it, and the list has to be scoped the same way or a rebuilt project would
+ * think it still had files it does not.
  */
-export interface SaturnClipLink {
-	shotId: number;
-	/** CDN address of the rendered video, absent while the shot is unrendered. */
-	videoUrl: string | null;
-	videoSuffix: string | null;
-	videoName: string | null;
-	shotNo: string | null;
-}
+const IMPORTED_SHOTS_KEY_PREFIX = "saturn-imported-shots:";
 
-const clipLinkSchema: z.ZodType<SaturnClipLink> = z.object({
-	shotId: z.number(),
-	videoUrl: z.string().nullish().transform((value) => value ?? null),
-	videoSuffix: z.string().nullish().transform((value) => value ?? null),
-	videoName: z.string().nullish().transform((value) => value ?? null),
-	shotNo: z.string().nullish().transform((value) => value ?? null),
-});
-
-const CLIP_LINKS_KEY_PREFIX = "saturn-clip-links:";
-
-export function saveClipLinks({
+export function saveImportedShotIds({
 	projectId,
-	links,
+	shotIds,
 }: {
 	projectId: string;
-	links: Record<string, SaturnClipLink>;
+	shotIds: Set<number>;
 }): void {
 	try {
 		localStorage.setItem(
-			`${CLIP_LINKS_KEY_PREFIX}${projectId}`,
-			JSON.stringify(links),
+			`${IMPORTED_SHOTS_KEY_PREFIX}${projectId}`,
+			JSON.stringify([...shotIds]),
 		);
 	} catch {
-		// Losing this only costs the per-clip "replace with video" action; the
-		// timeline itself is intact.
+		// A lost list costs a redundant download on the next visit and nothing
+		// else, since importing an asset twice is harmless.
 	}
 }
 
-export function loadClipLinks({
+export function loadImportedShotIds({
 	projectId,
 }: {
 	projectId: string;
-}): Record<string, SaturnClipLink> {
+}): Set<number> {
 	try {
-		const raw = localStorage.getItem(`${CLIP_LINKS_KEY_PREFIX}${projectId}`);
-		if (!raw) return {};
+		const raw = localStorage.getItem(`${IMPORTED_SHOTS_KEY_PREFIX}${projectId}`);
+		if (!raw) return new Set();
 
-		const parsed = z.record(z.string(), clipLinkSchema).safeParse(JSON.parse(raw));
-		return parsed.success ? parsed.data : {};
+		const parsed = z.array(z.number()).safeParse(JSON.parse(raw));
+		return parsed.success ? new Set(parsed.data) : new Set();
 	} catch {
-		return {};
+		return new Set();
 	}
 }
 
@@ -243,12 +227,20 @@ export function markPendingOpen(pending: SaturnPendingOpen): void {
 	}
 }
 
-/** Reads and clears the pending open, if there is one. */
-export function consumePendingOpen(): SaturnPendingOpen | null {
+/**
+ * Reads the pending open without clearing it.
+ *
+ * Not consumed on read on purpose. The editor reads this *before* it creates
+ * anything, and creation can fail (quota, a panic in the WASM core). If the
+ * read also cleared it, that failure would leave the retry with no project name
+ * and no upstream id — it would create an untitled orphan and the user would
+ * have no way back to the right project. Clearing therefore waits for the
+ * creation to actually succeed; see clearPendingOpen.
+ */
+export function readPendingOpen(): SaturnPendingOpen | null {
 	try {
 		const raw = localStorage.getItem(PENDING_OPEN_KEY);
 		if (!raw) return null;
-		localStorage.removeItem(PENDING_OPEN_KEY);
 
 		const parsed: unknown = JSON.parse(raw);
 		if (
@@ -268,6 +260,15 @@ export function consumePendingOpen(): SaturnPendingOpen | null {
 		};
 	} catch {
 		return null;
+	}
+}
+
+/** Drops the pending open, once it has been acted on successfully. */
+export function clearPendingOpen(): void {
+	try {
+		localStorage.removeItem(PENDING_OPEN_KEY);
+	} catch {
+		// Nothing to do — the entry is unreachable either way.
 	}
 }
 

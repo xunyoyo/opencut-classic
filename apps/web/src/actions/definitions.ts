@@ -194,6 +194,21 @@ export function getActionDefinition({
 	};
 }
 
+const ACTION_SET: ReadonlySet<string> = new Set(Object.keys(ACTIONS));
+
+// Actions whose arg type does not include `undefined` — calling them without
+// args is a type error, so they are excluded from TActionWithOptionalArgs.
+const REQUIRED_ARG_ACTIONS: ReadonlySet<string> = new Set<string>([
+	"remove-media-asset",
+	"remove-media-assets",
+]);
+
+export function isActionWithOptionalArgs(
+	value: string,
+): value is TActionWithOptionalArgs {
+	return ACTION_SET.has(value) && !REQUIRED_ARG_ACTIONS.has(value);
+}
+
 export function getDefaultShortcuts(): Map<
 	ShortcutKey,
 	TActionWithOptionalArgs

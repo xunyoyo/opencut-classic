@@ -119,15 +119,15 @@ export function EditorProvider({ projectId, children }: EditorProviderProps) {
 						const shots =
 							takeShotHandoff({ saturnProjectId }) ?? prefetch?.shots ?? null;
 
-						// Refused rather than created empty. A project made without
-						// shots would persist this saturnProjectId with nothing to
-						// show, and the landing page would then find it and reuse it
-						// forever — the user would never see their footage. Failing
-						// here leaves the retry free to do it properly.
+						// Refused rather than created empty. Nothing is placed on the
+						// timeline, so a project made without shots would persist
+						// this saturnProjectId with nothing in the assets panel
+						// either — and the landing page would then find it and reuse
+						// it forever, leaving the user with a husk. Failing here
+						// leaves the retry free to do it properly.
 						//
 						// Checked in segments: a tree of nothing but container shots
-						// would pass a node count and still lay down an empty
-						// timeline.
+						// would pass a node count while carrying no render at all.
 						if (!shots || projectShotSegments(shots).length === 0) {
 							setError(
 								"没有取到这个项目的分镜数据，请重新从 AI-Saturn 的「剪辑」进入",
@@ -334,13 +334,18 @@ function SaturnMediaSync() {
 		// on a project with hundreds it competes with the decode that is the
 		// actual bottleneck, so the label is only rewritten when it changes.
 		let lastLabel = "";
+		// Carried out of the loop for the closing toast. Read from the progress
+		// rather than counted here, because a shot counts as finished whatever it
+		// ended as — the importer is the only side that knows which way.
+		let failed = 0;
 
 		void importSaturnShotMedia({
 			editor,
 			projectId: editorProjectId,
 			shots: prefetch.shots,
 			signal: controller.signal,
-			onProgress: ({ done, total }) => {
+			onProgress: ({ done, total, failed: failedNow }) => {
+				failed = failedNow;
 				const label = `正在导入成片（${done}/${total}）`;
 				if (label === lastLabel) return;
 				lastLabel = label;
@@ -351,9 +356,32 @@ function SaturnMediaSync() {
 				if (controller.signal.aborted) return;
 
 				if (byShotId.size === 0) {
+					// Nothing landed at all. Saying "没有可导入的成片" here reads as
+					// "the project has no renders", which is the one thing we know
+					// is false — every shot in the batch had a video URL.
+					if (failed > 0) {
+						toast.error(`成片导入失败（${failed} 个都没取到），可重新进入项目重试`, {
+							id: toastId,
+						});
+						return;
+					}
 					toast.info("没有可导入的成片", { id: toastId });
 					return;
 				}
+
+				// Failures are reported alongside the successes rather than as a
+				// separate toast: both numbers describe the same one batch, and a
+				// failure count on its own leaves the user without the total. What
+				// failed is in the console; the toast says a retry is worth it,
+				// since a failed shot is deliberately not recorded as imported.
+				if (failed > 0) {
+					toast.warning(`素材库新增 ${byShotId.size} 个成片，${failed} 个导入失败`, {
+						id: toastId,
+						description: "重新进入项目可以重试失败的成片",
+					});
+					return;
+				}
+
 				toast.success(`素材库新增 ${byShotId.size} 个成片`, { id: toastId });
 			})
 			.catch(() => {

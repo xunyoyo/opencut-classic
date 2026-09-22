@@ -5,8 +5,8 @@
  * the CDN: the bucket sends no CORS headers, so a cross-origin `fetch` from the
  * editor origin is blocked. Relaying it makes the request same-origin.
  *
- * Shared by the media importer and the placeholder replacement so the URL
- * construction and the error shape stay in one place.
+ * Shared by the media importer and whatever else pulls a single asset, so the
+ * URL construction and the error shape stay in one place.
  */
 export async function downloadSaturnAsset({
 	url,

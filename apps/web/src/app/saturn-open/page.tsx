@@ -212,7 +212,10 @@ function SaturnOpen() {
 			storeSaturnToken({ token });
 
 			try {
-				const shots = await fetchSaturnProjectShots({ token });
+				const shots = await fetchSaturnProjectShots({
+					token,
+					projectId: targetProjectId,
+				});
 				// Counted in segments, not nodes: a container shot and the sub-shots
 				// inside it are one stretch of picture, and only one of the two
 				// carries the render.
@@ -222,12 +225,12 @@ function SaturnOpen() {
 					throw new Error("该项目还没有分镜，请先在 AI-Saturn 生成分镜");
 				}
 
-				// Refused before creating anything. The timeline is built from the
-				// shots that have a render, so a project with none of them would be
-				// laid out as an empty scene and stamped as complete — every later
-				// visit would reuse that husk and the user would never see their
-				// footage. Far better to say so here and let them come back when
-				// there is something to cut.
+				// Refused before creating anything. Nothing is placed on the
+				// timeline, so a project with no renders would open onto an empty
+				// assets panel and an empty timeline — and, being stamped as
+				// complete, be reused on every later visit while the user waits
+				// for footage that is never going to arrive. Far better to say so
+				// here and let them come back when there is something to cut.
 				const rendered = segments.filter(
 					(shot) => typeof shot.videoUrl === "string" && shot.videoUrl.length > 0,
 				);
@@ -254,15 +257,17 @@ function SaturnOpen() {
 				// creating a second one on every visit — the editor project holds
 				// the user's actual timeline work.
 				//
-				// Only drafts whose timeline was actually laid out count. A project
-				// record is created before the placeholders go in, so a failure in
-				// between leaves a real project with an empty scene; reusing that
-				// husk would strand the user on a permanently empty timeline.
+				// Only fully built drafts count. The project record is written
+				// before the build finishes, so a failure in between leaves a real
+				// project with no assets and no stamp; reusing that husk would
+				// strand the user in it and never import their footage.
 				//
 				// The stamp, not duration: every save recomputes duration from the
 				// live scenes, so a user who deleted all their clips would look
 				// exactly like a project that was never built — and would silently
 				// get a second draft forked off their work.
+				// (`saturnLaidOut` keeps its name from when the build meant laying
+				// out a timeline; it is now the "built, not a husk" flag.)
 				const all = await storageService.loadAllProjectsMetadata();
 				const existing = all
 					.filter(

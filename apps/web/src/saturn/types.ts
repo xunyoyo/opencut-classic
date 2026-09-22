@@ -229,8 +229,8 @@ export function hasProjectShotVideo(
  * top-level array undercounts. Order is preserved: a parent is emitted before
  * its children.
  *
- * This is the "what shots exist" walk, used for counts. For what actually goes
- * on the timeline, see projectShotSegments — the two differ by the containers.
+ * This is the "what shots exist" walk, used for counts. For which shots carry a
+ * stretch of picture, see projectShotSegments — the two differ by the containers.
  */
 export function flattenProjectShots(
 	shots: SaturnProjectShot[],
@@ -249,9 +249,14 @@ export function flattenProjectShots(
 /**
  * The shots that are each one segment of picture, in play order.
  *
- * One rule: a shot that has a rendered video is a segment. Everything without
- * one still gets a placeholder clip, so the cut's shape is visible before the
- * renders land — that is the whole point of laying the project out up front.
+ * One rule: a shot that has a rendered video is a segment, and a segment is
+ * exactly one stretch of picture. Nothing else qualifies — a shot with no
+ * render is not a segment, because nothing is placed on the timeline from this
+ * list. The editor hands the user a filled assets panel and leaves the timeline
+ * to them; the segments exist to say which shots have footage worth importing.
+ * The same predicate therefore does double duty: segments are what gets
+ * downloaded, and what the caller counts when it needs to know whether a
+ * project has any footage at all.
  *
  * The parent/child structure matters for exactly one reason: not counting the
  * same stretch of picture twice. A shot with sub-shots is one prompt of up to
@@ -264,9 +269,15 @@ export function flattenProjectShots(
  * actually carries the picture, and a parent that has one is left as a single
  * 15s segment instead of three stubs.
  *
+ * A container whose sub-shots are all unrendered still comes back as a
+ * segment: the recursion finds no render to descend to, so the parent is what
+ * gets pushed. This is a superset filter by structure, not by render — every
+ * consumer filters on `videoUrl` itself, and only takes this list as "which
+ * shots to consider".
+ *
  * Exists alongside flattenProjectShots because they answer different questions:
- * that one is "what shots exist" (counts, the API contract), this is "what goes
- * on the timeline".
+ * that one is "what shots exist" (counts, the API contract), this is "which
+ * shots carry a stretch of picture".
  */
 export function projectShotSegments(
 	shots: SaturnProjectShot[],

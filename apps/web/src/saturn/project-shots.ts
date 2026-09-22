@@ -6,20 +6,40 @@ import {
 } from "./types";
 
 /**
- * Fetches every shot in the caller's current AI-Saturn project.
+ * Fetches every shot in a given AI-Saturn project.
  *
- * Note this is the *whole* project, across all episodes and scenes: the
- * upstream endpoint reads the project from the session rather than taking an
- * id. That is what makes a single request enough to populate the editor.
+ * Note this is the *whole* project, across all episodes and scenes — one request
+ * is enough to populate the editor.
+ *
+ * The project id is passed explicitly rather than left to the upstream session.
+ * The platform keeps a "currently active project" per user that any other tab
+ * can change, and the editor has no way to notice; sending the id the user
+ * actually opened is what keeps the shots and the window in agreement.
  */
 export async function fetchSaturnProjectShots({
 	token,
+	projectId,
 	signal,
 }: {
 	token: string;
+	/**
+	 * The AI-Saturn project the user actually opened, taken from the link the
+	 * platform handed us.
+	 *
+	 * Sent so the server can serve *this* project rather than whichever one the
+	 * user last activated in the platform — a second tab changing that value
+	 * would otherwise swap the shots under the editor. Optional only so a link
+	 * without one still works the old way; every real entry point has it.
+	 */
+	projectId?: number;
 	signal?: AbortSignal;
 }): Promise<SaturnProjectShot[]> {
-	const response = await fetch("/api/saturn/project-shots", {
+	const url = new URL("/api/saturn/project-shots", window.location.origin);
+	if (projectId !== undefined && Number.isFinite(projectId)) {
+		url.searchParams.set("projectId", String(projectId));
+	}
+
+	const response = await fetch(url, {
 		headers: { Authorization: token },
 		signal,
 	});

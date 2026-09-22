@@ -11,6 +11,15 @@ export interface SaturnImportProgress {
 	/** Shots finished, whether they were downloaded or skipped. */
 	done: number;
 	total: number;
+	/**
+	 * How many of `done` did not make it into the library.
+	 *
+	 * Reported because the download can fail per shot and the run still finishes
+	 * successfully: without the count, a project whose renders partly timed out
+	 * ends on "素材库新增 30 个成片" next to a 37/37 progress bar, and nothing
+	 * tells the user which seven are missing.
+	 */
+	failed: number;
 }
 
 /**
@@ -118,8 +127,9 @@ export async function importSaturnShotMedia({
 	const alreadyImported = loadImportedShotIds({ projectId });
 
 	let done = 0;
+	let failed = 0;
 	const report = () => {
-		onProgress?.({ done, total: withVideo.length });
+		onProgress?.({ done, total: withVideo.length, failed });
 	};
 	report();
 
@@ -139,6 +149,12 @@ export async function importSaturnShotMedia({
 				report();
 				return;
 			}
+
+			// Set once the bytes are in the library. Read in `finally`, which is
+			// where every path out of this worker converges — the two early
+			// returns above and below as well as a thrown download — so the
+			// failure count cannot be missed by a path that simply returns.
+			let landed = false;
 
 			// One deadline per shot, chained to the caller's signal so a cancelled
 			// import still stops immediately. The timer is what makes a wedged
@@ -171,6 +187,7 @@ export async function importSaturnShotMedia({
 				if (created) {
 					byShotId.set(shot.shotId, created);
 					alreadyImported.add(shot.shotId);
+					landed = true;
 				}
 			} catch (error) {
 				// One unreachable shot must not abandon the rest of the library.
@@ -178,6 +195,12 @@ export async function importSaturnShotMedia({
 			} finally {
 				clearTimeout(timer);
 				signal?.removeEventListener("abort", onOuterAbort);
+				// A cancelled run is not a failed one: the shots it never reached
+				// are still pending, and counting them as failures would report
+				// the whole library as broken every time the user navigates away.
+				// The deadline abort is the opposite case — that one is a failure
+				// and the shot it killed is already outside this batch.
+				if (!landed && !signal?.aborted) failed += 1;
 				done += 1;
 				report();
 			}

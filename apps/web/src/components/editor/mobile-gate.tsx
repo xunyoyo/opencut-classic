@@ -6,6 +6,7 @@ import { Button } from "../ui/button";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { ArrowLeft01Icon } from "@hugeicons/core-free-icons";
 import { useRouter } from "next/navigation";
+import { useBranding } from "@/saturn/use-branding";
 
 const STORAGE_KEY = "mobile-acknowledged";
 
@@ -16,6 +17,7 @@ interface MobileGateProps {
 export function MobileGate({ children }: MobileGateProps) {
 	const router = useRouter();
 	const [show, setShow] = useState<boolean | null>(null);
+	const { siteName } = useBranding();
 
 	useEffect(() => {
 		const isMobile = window.innerWidth < 1024;
@@ -52,8 +54,7 @@ export function MobileGate({ children }: MobileGateProps) {
 						暂仅支持桌面端
 					</h1>
 					<p className="text-muted-foreground text-sm leading-relaxed">
-						OpenCut目前还没有针对移动端或iPad优化，界面会错乱，功能也可能出问题，请在桌面端获得完整体验
-					</p>
+						{siteName}剪辑目前还没有针对移动端或iPad优化，界面会错乱，功能也可能出问题，请在桌面端获得完整体验					</p>
 				</div>
 				<div className="flex items-center gap-3">
 					<Button onClick={handleContinue}>仍要查看</Button>

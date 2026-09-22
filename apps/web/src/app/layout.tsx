@@ -5,6 +5,8 @@ import { Toaster } from "../components/ui/sonner";
 import { ChangelogNotification } from "@/changelog/components/changelog-notification";
 import { TooltipProvider } from "../components/ui/tooltip";
 import { baseMetaData } from "./metadata";
+import { SaturnBrandProvider } from "@/saturn/brand-provider";
+import { SaturnBrandDocument } from "@/saturn/brand-document";
 import { BotIdClient } from "botid/client";
 // import { webEnv } from "@/env/web"; // only read by the analytics beacon below
 import { Inter } from "next/font/google";
@@ -46,7 +48,9 @@ export default function RootLayout({
 					disableTransitionOnChange={true}
 				>
 					<TooltipProvider>
-						<Toaster />
+						<SaturnBrandProvider>
+							<SaturnBrandDocument />
+							<Toaster />
 						{/*
 						  Upstream's analytics beacon, reporting to OpenCut's own
 						  Databuddy account. Commented out for our deployment: it is
@@ -66,6 +70,7 @@ export default function RootLayout({
 							data-track-sessions={false}
 						/> */}
 						{children}
+						</SaturnBrandProvider>
 					</TooltipProvider>
 				</ThemeProvider>
 			</body>

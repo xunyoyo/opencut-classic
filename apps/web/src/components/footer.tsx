@@ -1,8 +1,10 @@
+"use client";
+
 import Link from "next/link";
 // import { RiDiscordFill, RiTwitterXLine } from "react-icons/ri";
 // import { FaGithub } from "react-icons/fa6";
 import Image from "next/image";
-import { DEFAULT_LOGO_URL } from "@/site/brand";
+import { resolveLogoUrl, useBranding } from "@/saturn/use-branding";
 // import { SOCIAL_LINKS } from "@/site/social";
 import { capitalizeFirstLetter } from "@/utils/string";
 
@@ -36,6 +38,10 @@ const links: CategoryLinks = {
 };
 
 export function Footer() {
+	const { siteName, logoUrl: brandLogoUrl, copyrightText, useTextLogo } =
+		useBranding();
+	const logoUrl = resolveLogoUrl({ logoUrl: brandLogoUrl });
+
 	return (
 		<footer className="bg-background border-t">
 			<div className="mx-auto max-w-5xl px-8 py-10">
@@ -43,14 +49,16 @@ export function Footer() {
 					{/* Brand Section */}
 					<div className="max-w-sm md:col-span-1">
 						<div className="mb-4 flex items-center justify-start gap-2">
-							<Image
-								src={DEFAULT_LOGO_URL}
-								alt="OpenCut"
-								width={24}
-								height={24}
-								className="invert dark:invert-0"
-							/>
-							<span className="text-lg font-bold">OpenCut</span>
+							{useTextLogo ? null : (
+								<Image
+									src={logoUrl}
+									alt={siteName}
+									width={24}
+									height={24}
+									className="invert dark:invert-0"
+								/>
+							)}
+							<span className="text-lg font-bold">{siteName}</span>
 						</div>
 						<p className="text-muted-foreground mb-5 text-sm md:text-left">
 							The privacy-first video editor that feels simple to use.
@@ -120,9 +128,7 @@ export function Footer() {
 				{/* Bottom Section */}
 				<div className="flex flex-col items-start justify-between gap-4 pt-2 md:flex-row">
 					<div className="text-muted-foreground flex items-center gap-4 text-sm">
-						<span>
-							© {new Date().getFullYear()} OpenCut, All Rights Reserved
-						</span>
+						<span>{copyrightText}</span>
 					</div>
 				</div>
 			</div>

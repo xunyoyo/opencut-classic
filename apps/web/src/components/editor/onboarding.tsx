@@ -5,6 +5,7 @@ import { useState } from "react";
 import ReactMarkdown from "react-markdown";
 // import { SOCIAL_LINKS } from "@/site/social";
 import { useLocalStorage } from "@/services/storage/use-local-storage";
+import { useBranding } from "@/saturn/use-branding";
 import { Button } from "../ui/button";
 import { Dialog, DialogBody, DialogContent, DialogTitle } from "../ui/dialog";
 
@@ -14,6 +15,7 @@ export function Onboarding() {
 		key: "hasSeenOnboarding",
 		defaultValue: false,
 	});
+	const { siteName } = useBranding();
 
 	const isOpen = !hasSeenOnboarding;
 
@@ -28,13 +30,13 @@ export function Onboarding() {
 	const getStepTitle = () => {
 		switch (step) {
 			case 0:
-				return "欢迎使用OpenCut测试版！🎉";
+				return `欢迎使用${siteName}剪辑！🎉`;
 			case 1:
 				return "⚠️ 这还是个非常早期的测试版！";
 			case 2:
 				return "🦋 祝测试愉快！";
 			default:
-				return "OpenCut新手引导";
+				return `${siteName}剪辑新手引导`;
 		}
 	};
 
@@ -44,8 +46,8 @@ export function Onboarding() {
 				return (
 					<div className="space-y-5">
 						<div className="space-y-3">
-							<Title title="欢迎使用OpenCut测试版！🎉" />
-							<Description description="你是最早试用OpenCut的人之一——一款完全开源的CapCut替代品" />
+							<Title title={`欢迎使用${siteName}剪辑！🎉`} />
+							<Description description="从 AI-Saturn 进来的成片已经在左侧素材面板里，拖到时间线上就能开始剪" />
 						</div>
 						<NextButton onClick={handleNext}>下一步</NextButton>
 					</div>

@@ -16,7 +16,7 @@ import {
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { cn } from "@/utils/ui";
-import { DEFAULT_LOGO_URL, SITE_URL } from "@/site/brand";
+import { resolveLogoUrl, useBranding } from "@/saturn/use-branding";
 // import { SOCIAL_LINKS } from "@/site/social";
 import {
 	ContextMenu,
@@ -28,6 +28,9 @@ import {
 export function Header() {
 	const [isMenuOpen, setIsMenuOpen] = useState(false);
 	const closeMenu = () => setIsMenuOpen(false);
+
+	const { siteName, logoUrl: brandLogoUrl, useTextLogo } = useBranding();
+	const logoUrl = resolveLogoUrl({ logoUrl: brandLogoUrl });
 
 	// The upstream project's own promotion. Nothing here belongs in an internal
 	// deployment, so the nav is empty rather than removed — restoring it is a
@@ -58,19 +61,25 @@ export function Header() {
 					<ContextMenu>
 						<ContextMenuTrigger asChild>
 							<Link href="/" className="flex items-center gap-3">
-								<Image
-									src={DEFAULT_LOGO_URL}
-									alt="OpenCut Logo"
-									className="invert dark:invert-0"
-									width={32}
-									height={32}
-								/>
+								{useTextLogo ? (
+									// No image logo to show. Upstream's wordmark is not ours to
+									// draw over an agency's site, so the name stands in.
+									<span className="text-lg font-bold">{siteName}</span>
+								) : (
+									<Image
+										src={logoUrl}
+										alt={`${siteName} Logo`}
+										className="invert dark:invert-0"
+										width={32}
+										height={32}
+									/>
+								)}
 							</Link>
 						</ContextMenuTrigger>
 						<ContextMenuContent>
 							<ContextMenuItem
 								onClick={async () => {
-									const res = await fetch(DEFAULT_LOGO_URL);
+									const res = await fetch(logoUrl);
 									const svg = await res.text();
 									await navigator.clipboard.writeText(svg);
 								}}
@@ -81,8 +90,8 @@ export function Header() {
 							<ContextMenuItem
 								onClick={() => {
 									const a = document.createElement("a");
-									a.href = DEFAULT_LOGO_URL;
-									a.download = "opencut-logo.svg";
+									a.href = logoUrl;
+									a.download = "logo.svg";
 									a.click();
 								}}
 							>

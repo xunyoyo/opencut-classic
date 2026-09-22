@@ -5,6 +5,7 @@ import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { storeSaturnToken } from "@/saturn/session";
+import { readBrandFromParams, saveBrand } from "@/saturn/brand";
 import {
 	fetchSaturnProjectShots,
 	listShotPrefetches,
@@ -184,6 +185,16 @@ function SaturnOpen() {
 	const projectIdParam = searchParams.get("projectId");
 	const projectId = projectIdParam ? Number(projectIdParam) : Number.NaN;
 	const projectNameParam = searchParams.get("projectName");
+
+	// The upstream site's branding, when it sent any. AI-Saturn serves several
+	// brands off one codebase and tells them apart by Host, which this origin is
+	// not — so the name and logo have to ride along with the link. Stored rather
+	// than threaded through routing: the editor's chrome shows it on every page,
+	// long after this one is gone.
+	useEffect(() => {
+		const brand = readBrandFromParams(searchParams);
+		if (brand) saveBrand({ brand });
+	}, [searchParams]);
 
 	const openDraft = useCallback(
 		(draftId: string) => {

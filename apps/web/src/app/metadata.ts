@@ -1,6 +1,10 @@
 import type { Metadata } from "next";
 import { SITE_INFO, SITE_URL } from "@/site/brand";
 
+// Upstream's own promotion — the wordmark alt, the @opencutapp handle and the
+// og image are all OpenCut's, which is not who runs this deployment. The title
+// and description below are what a person actually sees in a tab or a link
+// preview, and both come from SITE_INFO so there is one place to change them.
 export const baseMetaData: Metadata = {
 	metadataBase: new URL(SITE_URL),
 	title: SITE_INFO.title,
@@ -10,30 +14,19 @@ export const baseMetaData: Metadata = {
 		description: SITE_INFO.description,
 		url: SITE_URL,
 		siteName: SITE_INFO.title,
-		locale: "en_US",
+		locale: "zh_CN",
 		type: "website",
-		images: [
-			{
-				url: SITE_INFO.openGraphImage,
-				width: 1200,
-				height: 630,
-				alt: "OpenCut Wordmark",
-			},
-		],
 	},
 	twitter: {
 		card: "summary_large_image",
 		title: SITE_INFO.title,
 		description: SITE_INFO.description,
-		creator: "@opencutapp",
-		images: [SITE_INFO.twitterImage],
 	},
-	pinterest: {
-		richPin: false,
-	},
+	// An internal tool has no business being indexed, and the upstream sitemap
+	// and RSS feed still list pages this deployment hides.
 	robots: {
-		index: true,
-		follow: true,
+		index: false,
+		follow: false,
 	},
 	icons: {
 		icon: [

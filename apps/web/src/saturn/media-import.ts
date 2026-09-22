@@ -25,6 +25,22 @@ export interface SaturnImportProgress {
  */
 const DOWNLOAD_CONCURRENCY = 3;
 
+/**
+ * How long a single shot is allowed to take before it is given up on.
+ *
+ * The decode probe is the only unbounded step in the pipeline: mediabunny reads
+ * the container to get duration, dimensions and fps, and a file it cannot make
+ * sense of can leave that promise pending forever. Without a deadline that shot
+ * holds its slot for the life of the page, and with three slots the whole
+ * library import stalls behind files that will never finish.
+ *
+ * Generous on purpose — the largest renders are tens of megabytes and are
+ * decoded on the main thread, so a slow success must not be mistaken for a
+ * hang. Failing a shot is recoverable: it is not recorded as imported, so the
+ * next visit retries it.
+ */
+const SHOT_TIMEOUT_MS = 120_000;
+
 /** Runs `worker` over `items` with at most `limit` in flight, preserving order. */
 async function mapWithConcurrency<T, R>({
 	items,
@@ -124,12 +140,26 @@ export async function importSaturnShotMedia({
 				return;
 			}
 
+			// One deadline per shot, chained to the caller's signal so a cancelled
+			// import still stops immediately. The timer is what makes a wedged
+			// decode recoverable; the abort is what makes cancellation work.
+			const timeout = new AbortController();
+			const timer = setTimeout(() => timeout.abort(), SHOT_TIMEOUT_MS);
+			const onOuterAbort = () => timeout.abort();
+			signal?.addEventListener("abort", onOuterAbort);
+
 			try {
 				const file = await downloadSaturnAsset({
 					url: shot.videoUrl,
 					name: shotFileName(shot),
-					signal,
+					signal: timeout.signal,
 				});
+
+				// The decode probe takes no signal, so a shot that ran out of time
+				// during the download would still be decoded — which is the whole
+				// cost this deadline exists to avoid. Checked here as well as at
+				// the top of the worker.
+				if (timeout.signal.aborted) return;
 
 				const [processed] = await processMediaAssets({ files: [file] });
 				if (!processed) return;
@@ -146,6 +176,8 @@ export async function importSaturnShotMedia({
 				// One unreachable shot must not abandon the rest of the library.
 				console.warn(`[saturn] 素材导入失败：${shotFileName(shot)}`, error);
 			} finally {
+				clearTimeout(timer);
+				signal?.removeEventListener("abort", onOuterAbort);
 				done += 1;
 				report();
 			}

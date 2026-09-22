@@ -263,6 +263,22 @@ export function EditorProvider({ projectId, children }: EditorProviderProps) {
 }
 
 /**
+ * Editor projects with a media import currently running.
+ *
+ * The effect below can be entered twice for the same project — StrictMode
+ * re-runs effects in development, and the active project is assigned again as
+ * the editor finishes loading. Two importers would each find an empty "already
+ * imported" set and download the whole project twice, and since every clip is
+ * decoded on the main thread the doubled work does not even run in parallel:
+ * the two runs starve each other and the progress bar stops moving.
+ *
+ * Module-level rather than a ref for the same reason as `creationsInFlight`:
+ * the overlapping runs are different effect instances, so no single ref sees
+ * both.
+ */
+const mediaImportsInFlight = new Set<string>();
+
+/**
  * Tops up the media library with renders that landed since the project was last
  * opened.
  *
@@ -301,6 +317,9 @@ function SaturnMediaSync() {
 		const pending = rendered.filter((shot) => !imported.has(shot.shotId));
 		if (pending.length === 0) return;
 
+		if (mediaImportsInFlight.has(editorProjectId)) return;
+		mediaImportsInFlight.add(editorProjectId);
+
 		const controller = new AbortController();
 		const editor = EditorCore.getInstance();
 
@@ -308,9 +327,13 @@ function SaturnMediaSync() {
 		// belongs in a corner rather than on a screen the user cannot leave.
 		// A single toast id lets each update replace the last one instead of
 		// stacking one per shot.
-		const toastId = toast.loading(
-			`正在导入成片（0/${pending.length}）`,
-		);
+		const toastId = toast.loading(`正在导入成片（0/${pending.length}）`);
+
+		// Every update re-renders the toast subtree, and the importer reports
+		// once per shot with three shots in flight. At a few files it is free;
+		// on a project with hundreds it competes with the decode that is the
+		// actual bottleneck, so the label is only rewritten when it changes.
+		let lastLabel = "";
 
 		void importSaturnShotMedia({
 			editor,
@@ -318,7 +341,10 @@ function SaturnMediaSync() {
 			shots: prefetch.shots,
 			signal: controller.signal,
 			onProgress: ({ done, total }) => {
-				toast.loading(`正在导入成片（${done}/${total}）`, { id: toastId });
+				const label = `正在导入成片（${done}/${total}）`;
+				if (label === lastLabel) return;
+				lastLabel = label;
+				toast.loading(label, { id: toastId });
 			},
 		})
 			.then((byShotId) => {
@@ -335,11 +361,19 @@ function SaturnMediaSync() {
 				// Individual failures are logged and skipped by the importer, so
 				// reaching here means the whole run fell over — worth saying.
 				toast.error("成片导入中断，可重新进入项目继续", { id: toastId });
+			})
+			.finally(() => {
+				// An aborted run resolved early rather than doing work, so it must
+				// not clear the flag: by the time its `finally` lands, the run that
+				// replaced it may already have claimed the same id.
+				if (controller.signal.aborted) return;
+				mediaImportsInFlight.delete(editorProjectId);
 			});
 
 		return () => {
 			controller.abort();
 			toast.dismiss(toastId);
+			mediaImportsInFlight.delete(editorProjectId);
 		};
 	}, [saturnProjectId, editorProjectId]);
 

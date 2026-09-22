@@ -130,7 +130,7 @@ export function EditorProvider({ projectId, children }: EditorProviderProps) {
 						// would pass a node count while carrying no render at all.
 						if (!shots || projectShotSegments(shots).length === 0) {
 							setError(
-								"没有取到这个项目的分镜数据，请重新从 AI-Saturn 的「剪辑」进入",
+								"没有取到这个项目的成片数据，请重新从 AI-Saturn 的「剪辑」进入",
 							);
 							setIsLoading(false);
 							return;

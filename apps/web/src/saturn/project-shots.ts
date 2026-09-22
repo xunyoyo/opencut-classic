@@ -48,17 +48,17 @@ export async function fetchSaturnProjectShots({
 		throw new Error("AI-Saturn 登录态已失效，请重新从平台进入");
 	}
 	if (!response.ok) {
-		throw new Error(`获取项目分镜失败（HTTP ${response.status}）`);
+		throw new Error(`获取项目成片失败（HTTP ${response.status}）`);
 	}
 
 	const parsed = saturnProjectShotsResponseSchema.safeParse(
 		await response.json(),
 	);
 	if (!parsed.success) {
-		throw new Error("AI-Saturn 返回了无法解析的分镜数据");
+		throw new Error("AI-Saturn 返回了无法解析的成片数据");
 	}
 	if (parsed.data.code !== 200) {
-		throw new Error(parsed.data.msg || "获取项目分镜失败");
+		throw new Error(parsed.data.msg || "获取项目成片失败");
 	}
 
 	return parsed.data.data ?? [];

@@ -122,7 +122,7 @@ function DraftPicker({
 									{prefetch.projectName || `项目 ${prefetch.projectId}`}
 								</span>
 								<span className="mt-0.5 block text-xs text-muted-foreground">
-									{prefetch.totalCount} 个镜头 · 预取于{" "}
+									{prefetch.totalCount} 个成片 · 预取于{" "}
 									{new Date(prefetch.fetchedAt).toLocaleString()}
 								</span>
 							</span>
@@ -222,7 +222,7 @@ function SaturnOpen() {
 				const segments = projectShotSegments(shots);
 
 				if (segments.length === 0) {
-					throw new Error("该项目还没有分镜，请先在 AI-Saturn 生成分镜");
+					throw new Error("该项目还没有成片，请先在 AI-Saturn 生成");
 				}
 
 				// Refused before creating anything. Nothing is placed on the

@@ -4,7 +4,7 @@ import { processMediaAssets } from "@/media/processing";
 import { downloadSaturnAsset } from "./asset-download";
 import { shotFileName } from "./naming";
 import { loadImportedShotIds, saveImportedShotIds } from "./project-shots";
-import { projectShotSegments, type SaturnProjectShot } from "./types";
+import { sortedProjectShotSegments, type SaturnProjectShot } from "./types";
 
 /** How far along the importer is. */
 export interface SaturnImportProgress {
@@ -111,7 +111,10 @@ export async function importSaturnShotMedia({
 }): Promise<Map<number, MediaAsset>> {
 	// Segments, so a shot that carries its own render is taken as the one piece
 	// of footage it is rather than descending into the frames that made it up.
-	const withVideo = projectShotSegments(shots).filter(
+	// Sorted by episode → scene → shot, because this list is the download queue:
+	// taking it in upstream's order would interleave 第1集第1场镜1 with the same
+	// shot number from every other episode. See `compareProjectShots`.
+	const withVideo = sortedProjectShotSegments(shots).filter(
 		(shot): shot is SaturnProjectShot & { videoUrl: string } =>
 			typeof shot.videoUrl === "string" && shot.videoUrl.length > 0,
 	);

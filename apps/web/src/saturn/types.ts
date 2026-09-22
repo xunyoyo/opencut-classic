@@ -307,3 +307,67 @@ export function projectShotViewLabel(shot: SaturnProjectShot): string {
 				: "";
 	return [episode, scene].filter(Boolean).join(" · ");
 }
+
+/**
+ * Splits a shot number into its numeric head and everything after it.
+ *
+ * AI-Saturn numbers shots with an optional letter suffix — `6A` is the insert
+ * that follows `6`. Comparing those as strings puts `10` before `2`, so the
+ * numeric head is compared as a number and the suffix only breaks ties.
+ */
+function shotNoParts(shotNo: string | null | undefined): [number, string] {
+	const match = /^(\d+)(.*)$/.exec((shotNo ?? "").trim());
+	if (!match) return [Number.MAX_SAFE_INTEGER, shotNo ?? ""];
+	return [Number(match[1]), match[2]];
+}
+
+/**
+ * Orders shots the way the platform's own storyboard page reads: by episode,
+ * then scene, then shot number.
+ *
+ * Upstream returns them sorted by shot number alone (`cast(shot_no as signed)
+ * asc`), which is not an order a person recognises — shot numbers restart at 1
+ * in every 场次, so that sort interleaves 第1集第1场镜1, 第2集第1场镜1, 第3集…
+ * and shuffles the episodes among themselves besides. Verified against a real
+ * project: 84 场次 came back as 1/1, 2/1, 3/1, … 14/1, 16/1, 15/1, 17/1, …
+ *
+ * `viewId` is deliberately not used as the scene key even though it looks
+ * monotonic: on that same project, ordering by it disagreed with ordering by
+ * (seriesNo, viewNo), so it would have been a second source of the same bug.
+ *
+ * Shots missing episode or scene numbers sort last rather than first —
+ * `null` would otherwise land ahead of 第1集 and put unknowns at the top of a
+ * library the user is scanning from the start.
+ */
+export function compareProjectShots(
+	a: SaturnProjectShot,
+	b: SaturnProjectShot,
+): number {
+	const byEpisode = (a.seriesNo ?? Number.MAX_SAFE_INTEGER) - (b.seriesNo ?? Number.MAX_SAFE_INTEGER);
+	if (byEpisode !== 0) return byEpisode;
+
+	const byScene = (a.viewNo ?? Number.MAX_SAFE_INTEGER) - (b.viewNo ?? Number.MAX_SAFE_INTEGER);
+	if (byScene !== 0) return byScene;
+
+	const bySuffix = (a.viewNoSurffix ?? "").localeCompare(b.viewNoSurffix ?? "");
+	if (bySuffix !== 0) return bySuffix;
+
+	const [aNo, aSuffix] = shotNoParts(a.shotNo);
+	const [bNo, bSuffix] = shotNoParts(b.shotNo);
+	if (aNo !== bNo) return aNo - bNo;
+	return aSuffix.localeCompare(bSuffix);
+}
+
+/**
+ * `projectShotSegments` in the order a person reads the project.
+ *
+ * The sort exists so the import queue — which works through the list front to
+ * back, a few at a time — fills the assets panel from 第1集第1场 onward instead
+ * of in whatever order the database happened to emit. See
+ * `compareProjectShots` for why upstream's order is unusable.
+ */
+export function sortedProjectShotSegments(
+	shots: SaturnProjectShot[],
+): SaturnProjectShot[] {
+	return projectShotSegments(shots).sort(compareProjectShots);
+}

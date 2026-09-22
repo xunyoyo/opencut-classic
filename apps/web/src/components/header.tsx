@@ -140,7 +140,7 @@ export function Header() {
 						</Link> */}
 						<Link href="/projects">
 							<Button className="text-sm">
-								Projects
+								我的项目
 								<ArrowRight className="size-4" />
 							</Button>
 						</Link>

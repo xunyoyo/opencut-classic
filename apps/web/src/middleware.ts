@@ -7,7 +7,8 @@ import { NextResponse } from "next/server";
  * brand assets and blog — or state terms and a privacy policy for a hosted
  * service we are not the ones running. None of it belongs in an internal
  * tool, and the privacy policy in particular describes data handling that is
- * not ours to claim.
+ * not ours to claim. The changelog is upstream's own release notes, written
+ * for their users about their releases, so it goes the same way.
  *
  * The pages are left in the tree rather than deleted, so merging from
  * upstream stays clean; the routes simply do not resolve here. A plain 404 in
@@ -28,6 +29,8 @@ export const config = {
 		"/blog/:path*",
 		"/brand",
 		"/brand/:path*",
+		"/changelog",
+		"/changelog/:path*",
 		"/contributors",
 		"/contributors/:path*",
 		"/privacy",

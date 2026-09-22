@@ -19,12 +19,11 @@ type CategoryLinks = Record<Category, FooterLink[]>;
 
 // Everything commented out here either promotes the upstream project or is a
 // route the middleware now hides, so linking to it would only produce a 404.
-// Changelog stays because it describes the software people are using. An
-// emptied category is skipped below rather than rendering a bare heading.
+// An emptied category is skipped below rather than rendering a bare heading.
 const links: CategoryLinks = {
 	resources: [
 		// { label: "Roadmap", href: "/roadmap" },
-		{ label: "Changelog", href: "/changelog" },
+		// { label: "Changelog", href: "/changelog" },
 		// { label: "Blog", href: "/blog" },
 		// { label: "Privacy", href: "/privacy" },
 		// { label: "Terms of use", href: "/terms" },
@@ -61,7 +60,7 @@ export function Footer() {
 							<span className="text-lg font-bold">{siteName}</span>
 						</div>
 						<p className="text-muted-foreground mb-5 text-sm md:text-left">
-							The privacy-first video editor that feels simple to use.
+							把成片拖进来做精剪。
 						</p>
 						{/* Upstream's GitHub, X and Discord. */}
 						{/* <div className="flex justify-start gap-3">

@@ -62,20 +62,75 @@ function firstSegment(pathname: string): string {
 const PUBLIC_PATHS = new Set(["saturn-open"]);
 
 /**
- * API paths reachable without a session.
+ * API endpoints reachable without a session.
  *
- * `/api/saturn/session` is the exchange that mints the cookie — requiring a
- * cookie to reach it would be a closed loop, and the editor would be
- * impossible to enter.
+ * Matched **exactly**, or as a path prefix that ends on a segment boundary —
+ * not by `startsWith`. `/api/health` as a bare prefix would also admit
+ * `/api/healthcheck`, and `/api/auth` would admit anything a later change
+ * mounts beside it, so a new route would be unauthenticated by construction
+ * and silently. `isPublicApiPath` below draws that line.
  *
- * The rest are reachability probes: a healthcheck that needs a login reports
- * the editor as down, which is worse than useless.
+ *  - `/api/health` — reachability probe. A healthcheck that needs a login
+ *    reports the editor as down, which is worse than useless.
+ *  - `/api/auth` — Better Auth's mount point; the app does not use its session
+ *    for anything, but the route is part of the framework's wiring.
+ *  - `/api/saturn/session` — the exchange that mints the cookie. Requiring a
+ *    cookie to reach it would be a closed loop, and the editor would be
+ *    impossible to enter.
  */
-const PUBLIC_API_PREFIXES = [
+const PUBLIC_API_PATHS = new Set([
 	"/api/health",
 	"/api/auth",
 	"/api/saturn/session",
-];
+]);
+
+/**
+ * True for a public API path itself, or anything nested under one.
+ *
+ * Nested is allowed because Better Auth mounts several routes below
+ * `/api/auth`; what must not happen is a *sibling* being admitted by a string
+ * prefix. Comparing a whole segment is the difference between the two.
+ */
+function isPublicApiPath(pathname: string): boolean {
+	if (PUBLIC_API_PATHS.has(pathname)) return true;
+	for (const path of PUBLIC_API_PATHS) {
+		if (pathname.startsWith(`${path}/`)) return true;
+	}
+	return false;
+}
+
+/**
+ * Where redirects send the user, or `null` to fall back to the request's own
+ * origin.
+ *
+ * `request.url` is the obvious source and the wrong one: its origin comes from
+ * the `Host` header, which the caller controls. A request carrying
+ * `Host: evil.com` would produce a redirect to `https://evil.com/saturn-open`
+ * with the user's token on the query string — a phishing page that looks
+ * exactly like the editor it claims to be. Pinning the origin to configuration
+ * takes the header out of the decision.
+ *
+ * Only a usable value is returned. `NEXT_PUBLIC_SITE_URL` defaults to
+ * `http://localhost:3000` in the schema, and the Dockerfile bakes it in at
+ * build time — so an image built without the arg set carries that default into
+ * production, where honouring it would redirect every user to their own
+ * machine. `http:` is refused for the same reason: it is either that default or
+ * a misconfiguration. The check is a guard on the fallback, not a second
+ * design; a bad value degrades to `request.url` rather than breaking the gate.
+ *
+ * Read off `process.env` rather than through `@/env/web` for the same reason as
+ * the session secret — see the note in `session-cookie.ts`.
+ */
+function siteOrigin(): string | null {
+	const configured = process.env.NEXT_PUBLIC_SITE_URL;
+	if (!configured) return null;
+	try {
+		const { origin, protocol } = new URL(configured);
+		return protocol === "https:" ? origin : null;
+	} catch {
+		return null;
+	}
+}
 
 export async function proxy(request: NextRequest) {
 	const { pathname } = request.nextUrl;
@@ -88,9 +143,7 @@ export async function proxy(request: NextRequest) {
 	}
 
 	if (PUBLIC_PATHS.has(firstSegment(pathname))) return NextResponse.next();
-	if (PUBLIC_API_PREFIXES.some((prefix) => pathname.startsWith(prefix))) {
-		return NextResponse.next();
-	}
+	if (isPublicApiPath(pathname)) return NextResponse.next();
 
 	// Signature and expiry only — no I/O. The token was checked against the
 	// platform when the cookie was minted (`/api/saturn/session`); asking again
@@ -105,15 +158,25 @@ export async function proxy(request: NextRequest) {
 	// body to parse. The transcription client already branches on 401 and has
 	// a message ready for exactly this.
 	if (pathname.startsWith("/api/")) {
-		return NextResponse.json(
+		const refused = NextResponse.json(
 			{ error: "登录态已失效，请从 AI-Saturn 重新进入" },
 			{ status: 401 },
 		);
+		// An unauthenticated response cached by the CDN would outlive the
+		// condition that caused it — the next request, cookie and all, would be
+		// served the 401 from cache and the user would be locked out of an API
+		// they are entitled to call.
+		refused.headers.set("Cache-Control", "private, no-store, max-age=0");
+		return refused;
 	}
 
 	// A page. Send the user where they can re-establish a session, remembering
 	// where they were headed so the round trip does not lose their place.
-	const target = new URL("/saturn-open", request.url);
+	const origin = siteOrigin();
+	const target = new URL(
+		"/saturn-open",
+		origin ? `${origin}${pathname}` : request.url,
+	);
 	target.searchParams.set("reason", "expired");
 	if (pathname !== "/") target.searchParams.set("from", pathname);
 

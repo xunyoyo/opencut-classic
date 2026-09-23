@@ -144,9 +144,14 @@ export function openSession({
  * are refused, which is what keeps another origin from driving the editor's
  * own API routes with a borrowed cookie.
  *
- * `Secure` is conditional because production is HTTPS behind the CDN while
- * local development is plain `http://localhost:3000`, where a Secure cookie
- * is silently dropped and login becomes impossible.
+ * `Secure` is conditional, and the condition is inverted on purpose: it is
+ * dropped only for `development`, rather than added only for `production`.
+ * `NODE_ENV` is not something this code can rely on being set — a container
+ * started without it takes the `development` path in most tooling — and the
+ * failure is asymmetric. An extra `Secure` in local development costs a
+ * re-entry on `http://localhost`; a missing one in production puts the session
+ * on the wire in cleartext. Only one of those is silent, so the default is the
+ * restrictive one.
  *
  * Not `HttpOnly`, deliberately: `@/saturn/points` and the transcription
  * service read the token out of `sessionStorage` and send it as an
@@ -169,7 +174,7 @@ export function sessionCookieOptions({
 		path: "/",
 		httpOnly: false,
 		sameSite: "lax",
-		secure: process.env.NODE_ENV === "production",
+		secure: process.env.NODE_ENV !== "development",
 		maxAge: maxAgeSeconds,
 	};
 }

@@ -43,6 +43,16 @@ const identitySchema = z.object({
 	code: z.number(),
 });
 
+/**
+ * How long to wait on the platform before giving up and calling it unreachable.
+ *
+ * A bounded wait, not a nicety: this call sits between the user and the editor,
+ * so an upstream that accepts the connection and then never answers would leave
+ * them on 「正在校验登录态…」 with no failure card and nothing to retry. Ten
+ * seconds is well past a healthy response and well short of a person's patience.
+ */
+const IDENTITY_TIMEOUT_MS = 10_000;
+
 export async function POST(request: NextRequest) {
 	const authorization = request.headers.get("authorization");
 	if (!authorization) {
@@ -57,6 +67,7 @@ export async function POST(request: NextRequest) {
 		response = await fetch(new URL(IDENTITY_PATH, webEnv.SATURN_API_BASE), {
 			headers: { Authorization: authorization },
 			cache: "no-store",
+			signal: AbortSignal.timeout(IDENTITY_TIMEOUT_MS),
 		});
 	} catch (error) {
 		// Could not reach the platform at all. Distinct from "the platform said

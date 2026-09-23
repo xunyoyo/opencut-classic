@@ -12,6 +12,7 @@ import {
 	isRenderPerfEnabled,
 	recordWasmFrameProfile,
 } from "@/diagnostics/render-perf";
+import { isGpuAvailable } from "@/services/renderer/gpu-renderer";
 import type {
 	ExternalTextureDescriptor,
 	FrameDescriptor,
@@ -44,12 +45,46 @@ class WasmCompositor {
 	private initializedSize: { width: number; height: number } | null = null;
 	private cache = new Map<string, RenderedCacheEntry | ExternalCacheEntry>();
 
-	ensureInitialized({ width, height }: { width: number; height: number }) {
+	/**
+	 * Whether the compositor can be used at all.
+	 *
+	 * Every export on this module runs through the Rust `with_gpu_runtime`
+	 * guard, which *throws* when `initializeGpu()` never succeeded — and
+	 * `initCompositor` is guarded too, so there is no "initialize and see".
+	 * Callers therefore have to ask first. The Rust side's failure is final:
+	 * `GPU_RUNTIME` is a thread-local that only `initializeGpu()` ever fills,
+	 * and `gpu-renderer` memoizes the rejected promise, so a failure here is
+	 * never going to become a success later in the page's life.
+	 */
+	isAvailable(): boolean {
+		return isGpuAvailable();
+	}
+
+	/**
+	 * Get the compositor's output canvas, or null when there is no GPU to
+	 * render into.
+	 *
+	 * Null is returned rather than thrown because this runs inside a React
+	 * effect in `PreviewCanvas`: an exception there escapes every error
+	 * boundary (there are none in this app) and lands in React's uncaught
+	 * error handler, which renders nothing useful.
+	 */
+	ensureInitialized({
+		width,
+		height,
+	}: {
+		width: number;
+		height: number;
+	}): HTMLCanvasElement | null {
+		if (!this.isAvailable()) {
+			return null;
+		}
+
 		if (!this.canvas) {
 			initCompositor(width, height);
 			this.canvas = getCompositorCanvas();
 			this.initializedSize = { width, height };
-			return;
+			return this.canvas;
 		}
 
 		if (
@@ -60,16 +95,13 @@ class WasmCompositor {
 			resizeCompositor(width, height);
 			this.initializedSize = { width, height };
 		}
-	}
 
-	getCanvas(): HTMLCanvasElement {
-		if (!this.canvas) {
-			throw new Error("Compositor is not initialized");
-		}
 		return this.canvas;
 	}
 
 	syncTextures(textures: TextureUploadDescriptor[]) {
+		if (!this.canvas) return;
+
 		const nextIds = new Set(textures.map((texture) => texture.id));
 		for (const previousId of this.cache.keys()) {
 			if (!nextIds.has(previousId)) {
@@ -88,6 +120,11 @@ class WasmCompositor {
 	}
 
 	render(frame: FrameDescriptor) {
+		// Belt and braces: `syncTextures` bails without a canvas, but a caller
+		// that skips straight to rendering (the exporter does) must not reach
+		// `renderFrame` and get the same throw from the Rust guard.
+		if (!this.canvas) return;
+
 		renderFrame(frame);
 		if (isRenderPerfEnabled()) {
 			recordWasmFrameProfile(

@@ -716,11 +716,17 @@ export class ProjectManager {
 		tempCanvas.width = canvasSize.width;
 		tempCanvas.height = canvasSize.height;
 
-		await renderer.renderToCanvas({
+		// No GPU means nothing was drawn, so a data URL here would capture a
+		// blank canvas and then be persisted as the project's thumbnail — a
+		// permanent empty tile for a machine-specific reason. Leaving the
+		// thumbnail unset instead lets a later session (with a working GPU)
+		// fill it in, since the caller only generates one when it is missing.
+		const didRender = await renderer.renderToCanvas({
 			node: scene,
 			time: 0,
 			targetCanvas: tempCanvas,
 		});
+		if (!didRender) return false;
 
 		const thumbnailDataUrl = tempCanvas.toDataURL("image/png");
 

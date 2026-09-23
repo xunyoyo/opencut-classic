@@ -30,6 +30,7 @@ import {
 } from "@/preview/overlays";
 import { usePreviewStore } from "@/preview/preview-store";
 import { getGuidePreviewOverlaySource } from "@/guides";
+import { getGpuFailureReason } from "@/services/renderer/gpu-renderer";
 import {
 	bookmarkNotesPreviewOverlay,
 	getBookmarkPreviewOverlaySource,
@@ -62,13 +63,23 @@ function DegradedRendererBanner() {
 	const [dismissed, setDismissed] = useState(false);
 	if (!isDegraded || dismissed) return null;
 
+	// The upstream copy for this banner was "open OpenCut in Chrome", which is
+	// advice the user cannot act on when they are already in Chrome — the
+	// usual cause is hardware acceleration being off, or the GPU being on the
+	// browser's blocklist (remote desktop, VMs). Leading with the browser's own
+	// message makes it diagnosable instead of a dead end.
+	const reason = getGpuFailureReason();
+
 	return (
-		<div className="bg-accent border-b h-9 flex items-center justify-center gap-2 text-xs text-muted-foreground">
-			<span>为获得最佳体验，在Chrome中打开OpenCut</span>
+		<div className="bg-accent border-b py-1.5 px-3 flex items-center justify-center gap-2 text-xs text-muted-foreground">
+			<span className="text-center">
+				{`当前浏览器无法启用 GPU 渲染，预览与导出不可用。请开启浏览器硬件加速，或换用支持 WebGL2 的浏览器后重试。`}
+				{reason ? <span className="opacity-70">{`（${reason}）`}</span> : null}
+			</span>
 			<Button
 				variant="text"
 				size="icon"
-				className="p-0 w-auto [&_svg]:size-3.5"
+				className="p-0 w-auto shrink-0 [&_svg]:size-3.5"
 				onClick={() => setDismissed(true)}
 				aria-label="关闭"
 			>

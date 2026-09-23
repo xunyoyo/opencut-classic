@@ -5,6 +5,8 @@
  * `node:crypto` and must never be pulled into a client bundle.
  */
 
+import { clearSaturnToken } from "./session";
+
 /**
  * Trades an AI-Saturn token for the editor's session cookie.
  *
@@ -38,6 +40,13 @@ export async function establishSession({
 	}
 
 	if (response.ok) return;
+
+	// 401 means the platform rejected this token outright, so the copy in
+	// sessionStorage is dead too — and it is the copy the captions panel and the
+	// points readout send as an `Authorization` header. Clearing it here is what
+	// stops those from failing one by one against a credential the server has
+	// already refused.
+	if (response.status === 401) clearSaturnToken();
 
 	const message = await response
 		.json()

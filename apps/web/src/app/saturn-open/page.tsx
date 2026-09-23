@@ -100,10 +100,13 @@ function MissingParams({ reason }: { reason: string | null }) {
 function DraftPicker({
 	prefetches,
 	projects,
+	projectListFailed,
 	onOpen,
 }: {
 	prefetches: SaturnShotPrefetch[];
 	projects: TProjectMetadata[];
+	/** Distinguishes "no draft for this" from "could not read the drafts at all". */
+	projectListFailed: boolean;
 	onOpen: (projectId: string) => void;
 }) {
 	const byProjectId = new Map(projects.map((p) => [p.saturnProjectId, p]));
@@ -123,9 +126,16 @@ function DraftPicker({
 	return (
 		<div className="mx-auto max-w-lg px-6 py-16">
 			<h1 className="text-xl font-semibold">选择要剪辑的项目</h1>
-			<p className="mt-2 text-sm text-muted-foreground">
-				这些项目已经预取过，打开即可使用。
-			</p>
+			{projectListFailed ? (
+				<p className="mt-2 text-sm text-destructive">
+					没能读到本地的剪辑草稿，下面的「草稿已删除」不代表草稿真的不见了。
+					请刷新页面重试，不要重新从 AI-Saturn 进入 —— 那会新建一个草稿。
+				</p>
+			) : (
+				<p className="mt-2 text-sm text-muted-foreground">
+					这些项目已经预取过，打开即可使用。
+				</p>
+			)}
 			<div className="mt-6 space-y-2">
 				{prefetches.map((prefetch) => {
 					const draft = byProjectId.get(prefetch.projectId);
@@ -146,7 +156,7 @@ function DraftPicker({
 								</span>
 							</span>
 							<span className="ml-4 shrink-0 text-xs text-muted-foreground">
-								{draft ? "打开" : "草稿已删除"}
+								{draft ? "打开" : projectListFailed ? "无法读取" : "草稿已删除"}
 							</span>
 						</button>
 					);
@@ -197,6 +207,8 @@ function SaturnOpen() {
 	const [pickerData, setPickerData] = useState<{
 		prefetches: SaturnShotPrefetch[];
 		projects: TProjectMetadata[];
+		/** The project list could not be read, so a missing draft means nothing. */
+		projectListFailed: boolean;
 	} | null>(null);
 	const hasStarted = useRef(false);
 
@@ -227,20 +239,28 @@ function SaturnOpen() {
 	 * same-site path is taken, which rules out `//evil.com` as well as
 	 * `https://evil.com` — a leading `//` is protocol-relative, not a path.
 	 */
-	const destination = useCallback(
-		(draftId: string) =>
-			from && from.startsWith("/") && !from.startsWith("//")
-				? from
-				: `/editor/${draftId}`,
-		[from],
-	);
+	const resumePath = useCallback((): string | null => {
+		if (!from) return null;
+		return from.startsWith("/") && !from.startsWith("//") ? from : null;
+	}, [from]);
 
+	/**
+	 * Navigates into the editor.
+	 *
+	 * Resuming at `from` is opt-in, not automatic. Applying it unconditionally
+	 * would send a brand-new project to `from` as well — the caller parks the
+	 * handoff, marks the pending open and asks for `/editor/new-123`, and the
+	 * `new-` id that triggers project creation would never be navigated to, so
+	 * the project would silently not exist while its handoff sat in storage.
+	 * Only a draft being *reopened* is a place the user can be returned to;
+	 * a draft about to be created is not.
+	 */
 	const openDraft = useCallback(
-		(draftId: string) => {
+		(draftId: string, { resume = false }: { resume?: boolean } = {}) => {
 			// Same tab on purpose — see the note at the top of this file.
-			router.replace(destination(draftId));
+			router.replace((resume ? resumePath() : null) ?? `/editor/${draftId}`);
 		},
-		[router, destination],
+		[router, resumePath],
 	);
 
 	const prepare = useCallback(
@@ -326,7 +346,9 @@ function SaturnOpen() {
 					)[0];
 
 				if (existing) {
-					openDraft(existing.id);
+					// Reopening a draft the user already has, so a `from` they were
+				// interrupted on is a place they can actually be returned to.
+				openDraft(existing.id, { resume: true });
 					return;
 				}
 
@@ -380,11 +402,25 @@ function SaturnOpen() {
 				return;
 			}
 
+			// Separated from the session exchange above, and unable to throw: the
+			// only thing that moves the render past the skeleton is `setPickerData`,
+			// so a rejection here would leave the page on two pulsing bars forever
+			// with no failure card and no retry — a worse outcome than an empty
+			// list, which at least says something.
+			//
+			// `projectListFailed` is carried rather than folded into `projects: []`
+			// because the picker reads an absent draft as "this one was deleted",
+			// which would tell the user their work is gone when the truth is that
+			// the read failed.
 			const [prefetches, projects] = await Promise.all([
 				Promise.resolve(listShotPrefetches()),
-				storageService.loadAllProjectsMetadata().catch(() => []),
+				storageService.loadAllProjectsMetadata().catch(() => null),
 			]);
-			setPickerData({ prefetches, projects });
+			setPickerData({
+				prefetches,
+				projects: projects ?? [],
+				projectListFailed: projects === null,
+			});
 		})();
 	}, [token, projectId]);
 
@@ -436,7 +472,10 @@ function SaturnOpen() {
 		<DraftPicker
 			prefetches={pickerData.prefetches}
 			projects={pickerData.projects}
-			onOpen={openDraft}
+			projectListFailed={pickerData.projectListFailed}
+			// The picker is resuming a draft the user already has, so a `from`
+			// they were interrupted on is a place they can be returned to.
+			onOpen={(draftId) => openDraft(draftId, { resume: true })}
 		/>
 	);
 }

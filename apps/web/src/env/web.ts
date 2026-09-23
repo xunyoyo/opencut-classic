@@ -46,6 +46,16 @@ const webEnvSchema = z.object({
 	// AI-Saturn integration. Both default so existing deployments keep booting
 	// without new env vars; only the import route reads them.
 	SATURN_API_BASE: z.url().default("http://localhost:8080"),
+	// Signs the editor's own session cookie. Registered here because this schema
+	// is the inventory of what a deployment needs, but the proxy and the session
+	// route read `process.env` directly — importing this module would parse the
+	// whole schema and drag zod into the proxy bundle for one string.
+	//
+	// Not defaulted to a real value: a shared fallback would make every
+	// deployment that forgot to set it accept cookies minted by every other
+	// deployment that forgot too. Absent means the gate admits nobody, which is
+	// the safe direction to fail, and `/api/saturn/session` says so explicitly.
+	SATURN_SESSION_SECRET: z.string().optional(),
 	// Comma-separated allowlist for the asset proxy. Without it the proxy would
 	// fetch any URL the caller supplies, which is an SSRF hole.
 	SATURN_ASSET_HOSTS: z

@@ -5,6 +5,7 @@ import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { storeSaturnToken } from "@/saturn/session";
+import { establishSession } from "@/saturn/session-client";
 import { readBrandFromParams, saveBrand } from "@/saturn/brand";
 import {
 	fetchSaturnProjectShots,
@@ -42,10 +43,25 @@ type PrepState =
 // Explainer when the page is opened without the parameters the platform sends
 // ---------------------------------------------------------------------------
 
-function MissingParams() {
+/**
+ * Shown when this page is reached without the parameters the platform sends.
+ *
+ * That is now the normal destination of the gate in `proxy.ts`, so it is also
+ * where a user lands after their session lapsed — `reason` distinguishes the
+ * two cases, because they call for different actions (open AI-Saturn and click
+ * 「剪辑」, versus the same thing but knowing why you were interrupted).
+ */
+function MissingParams({ reason }: { reason: string | null }) {
+	const expired = reason === "expired";
+
 	return (
 		<div className="mx-auto max-w-lg px-6 py-16">
 			<h1 className="text-xl font-semibold">从 AI-Saturn 进入剪辑</h1>
+			{expired && (
+				<p className="mt-3 text-sm text-destructive">
+					登录态已失效，请重新从 AI-Saturn 的「剪辑」进入。
+				</p>
+			)}
 			<p className="mt-3 text-sm text-muted-foreground">
 				这个页面需要由 AI-Saturn 跳转进来，URL 上要带登录态：
 			</p>
@@ -70,6 +86,9 @@ function MissingParams() {
 					<dd className="inline"> —— 可选，用于命名新建的草稿</dd>
 				</div>
 			</dl>
+			<p className="mt-6 text-xs text-muted-foreground">
+				草稿保存在这个浏览器本地，不在服务器上；换浏览器或清了浏览器数据就看不到了。
+			</p>
 		</div>
 	);
 }
@@ -185,6 +204,10 @@ function SaturnOpen() {
 	const projectIdParam = searchParams.get("projectId");
 	const projectId = projectIdParam ? Number(projectIdParam) : Number.NaN;
 	const projectNameParam = searchParams.get("projectName");
+	/** Why the gate sent us here, when it did. `null` on a normal entry. */
+	const reason = searchParams.get("reason");
+	/** Where the user was headed, so a re-entry resumes rather than restarts. */
+	const from = searchParams.get("from");
 
 	// The upstream site's branding, when it sent any. AI-Saturn serves several
 	// brands off one codebase and tells them apart by Host, which this origin is
@@ -196,12 +219,28 @@ function SaturnOpen() {
 		if (brand) saveBrand({ brand });
 	}, [searchParams]);
 
+	/**
+	 * Where to go once the session is established.
+	 *
+	 * `from` comes off the query string, so it is attacker-controlled: honouring
+	 * an absolute URL would turn this page into an open redirect. Only a
+	 * same-site path is taken, which rules out `//evil.com` as well as
+	 * `https://evil.com` — a leading `//` is protocol-relative, not a path.
+	 */
+	const destination = useCallback(
+		(draftId: string) =>
+			from && from.startsWith("/") && !from.startsWith("//")
+				? from
+				: `/editor/${draftId}`,
+		[from],
+	);
+
 	const openDraft = useCallback(
 		(draftId: string) => {
 			// Same tab on purpose — see the note at the top of this file.
-			router.replace(`/editor/${draftId}`);
+			router.replace(destination(draftId));
 		},
-		[router],
+		[router, destination],
 	);
 
 	const prepare = useCallback(
@@ -209,9 +248,16 @@ function SaturnOpen() {
 			if (!token) return;
 
 			setState({ status: "working", label: "正在校验登录态…" });
-			storeSaturnToken({ token });
 
 			try {
+				// Validated against the platform, and the cookie it mints is what
+				// `proxy.ts` admits every later request on. Both must happen before
+				// anything else: the shots fetch below is already a gated request,
+				// and storing the token without a session would leave the client
+				// holding a credential the gate does not recognise.
+				await establishSession({ token });
+				storeSaturnToken({ token });
+
 				const shots = await fetchSaturnProjectShots({
 					token,
 					projectId: targetProjectId,
@@ -319,6 +365,21 @@ function SaturnOpen() {
 		hasStarted.current = true;
 
 		void (async () => {
+			// The session is established here too, not only on the project path.
+			// This branch sends the user to `/editor/:id` just the same once they
+			// pick a draft, and without a cookie that navigation is turned away by
+			// the gate — the picker would appear to work and then bounce.
+			try {
+				await establishSession({ token });
+				storeSaturnToken({ token });
+			} catch (error) {
+				setState({
+					status: "failed",
+					message: error instanceof Error ? error.message : "建立登录态失败",
+				});
+				return;
+			}
+
 			const [prefetches, projects] = await Promise.all([
 				Promise.resolve(listShotPrefetches()),
 				storageService.loadAllProjectsMetadata().catch(() => []),
@@ -328,7 +389,10 @@ function SaturnOpen() {
 	}, [token, projectId]);
 
 	if (!token) {
-		return <MissingParams />;
+		// Reached directly, or sent here by the gate after a session lapsed. A
+		// token in the URL means a fresh entry from the platform, which is the
+		// only way to get past this. See `MissingParams`.
+		return <MissingParams reason={reason} />;
 	}
 
 	if (Number.isFinite(projectId)) {
@@ -339,6 +403,21 @@ function SaturnOpen() {
 					hasStarted.current = false;
 					setState({ status: "idle" });
 					void prepare(projectId);
+				}}
+			/>
+		);
+	}
+
+	// The picker branch can fail on the session exchange, and says so through
+	// the same card rather than a spinner that never resolves.
+	if (state.status === "failed") {
+		return (
+			<PrepScreen
+				state={state}
+				onRetry={() => {
+					hasStarted.current = false;
+					setState({ status: "idle" });
+					window.location.reload();
 				}}
 			/>
 		);

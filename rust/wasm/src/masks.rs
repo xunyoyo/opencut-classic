@@ -32,7 +32,7 @@ pub fn apply_mask_feather(options: JsValue) -> Result<wgpu::web_sys::OffscreenCa
             width,
             height,
             "masks-input-texture",
-        );
+        )?;
         let result_texture = runtime.masks.apply_mask_feather(
             &runtime.context,
             masks::ApplyMaskFeatherOptions {

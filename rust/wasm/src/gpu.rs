@@ -82,8 +82,10 @@ pub(crate) fn import_canvas_texture(
     width: u32,
     height: u32,
     label: &'static str,
-) -> wgpu::Texture {
-    context.import_offscreen_canvas_texture(canvas, width, height, label)
+) -> Result<wgpu::Texture, JsValue> {
+    context
+        .import_offscreen_canvas_texture(canvas, width, height, label)
+        .map_err(|error| JsValue::from_str(&error.to_string()))
 }
 
 pub(crate) fn render_texture_to_canvas(

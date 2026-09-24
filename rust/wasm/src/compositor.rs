@@ -130,7 +130,7 @@ pub fn upload_texture(options: JsValue) -> Result<(), JsValue> {
                 width,
                 height,
                 "compositor-upload-texture",
-            );
+            )?;
             runtime.compositor.upsert_texture(id, texture);
             Ok(())
         })

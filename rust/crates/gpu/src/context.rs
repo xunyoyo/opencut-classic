@@ -508,7 +508,7 @@ impl GpuContext {
         width: u32,
         height: u32,
         label: &'static str,
-    ) -> wgpu::Texture {
+    ) -> Result<wgpu::Texture, GpuError> {
         let texture = self.create_render_texture(width, height, label);
 
         if self.supports_external_texture_copies {
@@ -537,11 +537,11 @@ impl GpuContext {
                 .get_context("2d")
                 .ok()
                 .flatten()
-                .expect("Failed to get 2d context for texture import")
+                .ok_or(GpuError::CanvasReadback("the canvas has no 2d context"))?
                 .unchecked_into();
             let image_data = ctx
                 .get_image_data(0.0, 0.0, width as f64, height as f64)
-                .expect("Failed to read pixel data from canvas");
+                .map_err(|_| GpuError::CanvasReadback("getImageData failed"))?;
             let rgba_bytes = image_data.data();
 
             let pixel_bytes = if self.texture_format == wgpu::TextureFormat::Bgra8Unorm {
@@ -575,7 +575,7 @@ impl GpuContext {
             );
         }
 
-        texture
+        Ok(texture)
     }
 
     #[cfg(all(feature = "wasm", target_arch = "wasm32"))]

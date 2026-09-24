@@ -48,7 +48,7 @@ pub fn apply_effect_passes(options: JsValue) -> Result<wgpu::web_sys::OffscreenC
             width,
             height,
             "effects-input-texture",
-        );
+        )?;
         let effect_passes = map_effect_passes(passes);
         let result_texture = runtime
             .effects

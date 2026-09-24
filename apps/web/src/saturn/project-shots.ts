@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { clientFetchSignal, isFetchTimeout } from "./fetch-timeout";
 import {
 	saturnProjectShotSchema,
 	saturnProjectShotsResponseSchema,
@@ -41,7 +42,18 @@ export async function fetchSaturnProjectShots({
 
 	const response = await fetch(url, {
 		headers: { Authorization: token },
-		signal,
+		// Deadlined here as well as in the route. The route's timeout covers
+		// its own call upstream; this covers the browser's call to the route,
+		// which is the one `prepare()` is waiting on with a spinner up.
+		signal: clientFetchSignal(signal),
+	}).catch((error: unknown) => {
+		// Caught rather than left to propagate: an unwrapped `TimeoutError`
+		// carries no usable message and would surface in `prepare()`'s error
+		// card as "The operation was aborted due to timeout".
+		if (isFetchTimeout(error)) {
+			throw new Error("获取项目成片超时，请重试");
+		}
+		throw error;
 	});
 
 	if (response.status === 401) {

@@ -6,6 +6,7 @@
  */
 
 import { clearSaturnToken } from "./session";
+import { clientFetchSignal, isFetchTimeout } from "./fetch-timeout";
 
 /**
  * Trades an AI-Saturn token for the editor's session cookie.
@@ -32,10 +33,19 @@ export async function establishSession({
 		response = await fetch("/api/saturn/session", {
 			method: "POST",
 			headers: { Authorization: token },
-			signal,
+			// Deadlined here rather than left to the route: the server's own
+			// 10s bounds its call to `/getInfo`, not the browser's call to us,
+			// and the caller of this function blocks the whole page on it.
+			signal: clientFetchSignal(signal),
 		});
 	} catch (error) {
-		if (error instanceof Error && error.name === "AbortError") throw error;
+		// A deadline is not the same failure as an unreachable server, and the
+		// two need different words: "check your network" is wrong advice for a
+		// server that took the request and never answered. The caller renders
+		// whatever message this throws, so it has to be the true one.
+		if (isFetchTimeout(error)) {
+			throw new Error("建立登录态超时，请重试");
+		}
 		throw new Error("无法连接服务器，请检查网络后重试");
 	}
 

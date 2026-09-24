@@ -4,7 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { KeyboardEvent, MouseEvent } from "react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import type { EditorCore } from "@/core";
 import { MigrationDialog } from "@/project/components/migration-dialog";
@@ -507,12 +507,35 @@ function SortDropdown({ children }: { children: React.ReactNode }) {
 function NewProjectButton() {
 	const editor = useEditor();
 	const router = useRouter();
+	const creating = useRef(false);
 
+	// Two clicks before the first project is written produce two projects.
+	// `createNewProject` assigns `this.active` and notifies before it awaits the
+	// storage write, so both calls land: whichever write resolves last wins
+	// `active`, while whichever `router.push` fires last wins the URL. When
+	// those disagree, the editor opens the id in the address bar while holding
+	// a different project in memory, and reads the former back from storage —
+	// an empty husk with no timeline, which is what a stray 「新建项目」 showing
+	// 0:00 in the list turned out to be.
+	//
+	// A ref, not state: `setState` is asynchronous, so a second click in the
+	// same tick would still read the old value and get through.
 	const handleCreateProject = async () => {
-		const projectId = await editor.project.createNewProject({
-			name: "新建项目",
-		});
-		router.push(`/editor/${projectId}`);
+		if (creating.current) return;
+		creating.current = true;
+		try {
+			const projectId = await editor.project.createNewProject({
+				name: "新建项目",
+			});
+			// Inside the try: a failed navigation must not leave the guard set.
+			router.push(`/editor/${projectId}`);
+		} catch (error) {
+			toast.error("创建项目失败", {
+				description: error instanceof Error ? error.message : "请重试",
+			});
+		} finally {
+			creating.current = false;
+		}
 	};
 
 	return (
@@ -952,8 +975,14 @@ function EmptyState() {
 	const router = useRouter();
 	const editor = useEditor();
 	const savedProjects = editor.project.getSavedProjects();
+	const creating = useRef(false);
 
+	// Same guard as NewProjectButton, and for the same reason — see the note
+	// there. This one already had the try/catch; it was missing only the
+	// in-flight check.
 	const handleCreateProject = async () => {
+		if (creating.current) return;
+		creating.current = true;
 		try {
 			const projectId = await editor.project.createNewProject({
 				name: "新建项目",
@@ -964,6 +993,8 @@ function EmptyState() {
 				description:
 					error instanceof Error ? error.message : "请重试",
 			});
+		} finally {
+			creating.current = false;
 		}
 	};
 

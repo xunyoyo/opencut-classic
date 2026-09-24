@@ -1,5 +1,6 @@
 import { webEnv } from "@/env/web";
 import { type NextRequest, NextResponse } from "next/server";
+import { isUpstreamTimeout, upstreamSignal } from "../upstream-timeout";
 
 /**
  * Proxies AI-Saturn's project list for the current user.
@@ -26,6 +27,7 @@ export async function GET(request: NextRequest) {
 		const response = await fetch(upstream, {
 			headers: { Authorization: authorization },
 			cache: "no-store",
+			signal: upstreamSignal(),
 		});
 
 		if (!response.ok) {
@@ -40,7 +42,7 @@ export async function GET(request: NextRequest) {
 		console.error("Failed to reach AI-Saturn for project list:", error);
 		return NextResponse.json(
 			{ error: "Failed to reach AI-Saturn" },
-			{ status: 502 },
+			{ status: isUpstreamTimeout(error) ? 504 : 502 },
 		);
 	}
 }

@@ -1,6 +1,7 @@
 import { webEnv } from "@/env/web";
 import { type NextRequest, NextResponse } from "next/server";
 import { toPublicAssetUrl } from "../asset-origin";
+import { isUpstreamTimeout } from "../upstream-timeout";
 
 /**
  * Proxies AI-Saturn media files so the browser can read them as blobs.
@@ -17,6 +18,31 @@ const allowedHosts = new Set(
 		.map((host) => host.trim())
 		.filter(Boolean),
 );
+
+/**
+ * How long the CDN is allowed to take before it has to have produced response
+ * headers.
+ *
+ * Deliberately a header deadline and not a download deadline. This route is the
+ * one place in `/api/saturn` that does not return a row: it relays media bytes,
+ * and the response below is a stream handed straight to the client. A deadline
+ * covering the whole request would be a deadline on the transfer itself, and
+ * the files are tens to hundreds of megabytes — on a slow connection a legal
+ * download outlives any constant that is also short enough to notice a stall,
+ * so a total timeout here fails large files rather than wedged ones. The
+ * deadline is therefore cleared the moment headers arrive (see the fetch
+ * below); once the body starts flowing, progress is its own signal, and a peer
+ * that goes silent mid-body eventually trips the client's own abort.
+ *
+ * What the timeout still buys is the failure the other routes were missing: a
+ * socket that connects and then never answers. That one leaves the `await`
+ * pending and the user on a download that never starts, and unlike a large file
+ * it is indistinguishable from success until something gives up on it. Ten
+ * seconds is far past a healthy CDN (headers come back in milliseconds, the
+ * body is what is slow) and, because it is bounded by the header round trip
+ * rather than by the transfer, it is safe to keep short.
+ */
+const HEADERS_TIMEOUT_MS = 10_000;
 
 export async function GET(request: NextRequest) {
 	const rawUrl = request.nextUrl.searchParams.get("url");
@@ -56,7 +82,28 @@ export async function GET(request: NextRequest) {
 	const fetchUrl = toPublicAssetUrl(target.toString());
 
 	try {
-		const upstream = await fetch(fetchUrl, { cache: "no-store" });
+		// The controller is what lets the deadline above cover only the header
+		// phase: `clearTimeout` on the line after the fetch disarms it for good,
+		// since a timer that never fires cannot abort and an
+		// `AbortController.abort()` that was never called does not poison the
+		// response it already produced. Using `AbortSignal.timeout()` directly
+		// would not work here — its deadline is built in and runs to completion
+		// regardless, so a 200MB transfer on a slow link would be torn down
+		// mid-body by the very signal meant to catch a silent CDN.
+		const headersOnly = new AbortController();
+		const headerTimer = setTimeout(() => headersOnly.abort(), HEADERS_TIMEOUT_MS);
+
+		let upstream: Response;
+		try {
+			upstream = await fetch(fetchUrl, {
+				cache: "no-store",
+				signal: headersOnly.signal,
+			});
+		} finally {
+			// Runs before the body is read, so the abort above reaches the
+			// connection setup and nothing downstream.
+			clearTimeout(headerTimer);
+		}
 
 		if (!upstream.ok || !upstream.body) {
 			return NextResponse.json(
@@ -78,6 +125,17 @@ export async function GET(request: NextRequest) {
 			},
 		});
 	} catch (error) {
+		// A 504 rather than the 502 below: the origin is reachable, it just never
+		// produced headers, and the client's retry logic reads those two the same
+		// way it does for the JSON routes.
+		if (isUpstreamTimeout(error)) {
+			console.error("AI-Saturn asset origin sent no headers in time:", error);
+			return NextResponse.json(
+				{ error: "Asset origin timed out" },
+				{ status: 504 },
+			);
+		}
+
 		console.error("Failed to proxy AI-Saturn asset:", error);
 		return NextResponse.json(
 			{ error: "Failed to proxy asset" },

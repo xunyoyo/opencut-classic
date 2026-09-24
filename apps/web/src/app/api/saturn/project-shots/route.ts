@@ -1,6 +1,7 @@
 import { webEnv } from "@/env/web";
 import { type NextRequest, NextResponse } from "next/server";
 import { rewriteShotTreeAssetUrls } from "../asset-origin";
+import { isUpstreamTimeout, upstreamSignal } from "../upstream-timeout";
 
 /**
  * Proxies AI-Saturn's project-wide shot metadata.
@@ -37,9 +38,16 @@ export async function GET(request: NextRequest) {
 	}
 
 	try {
+		// The deadline here is what gives the landing page's prep flow a failure
+		// exit at all: it awaits this one route with no timeout of its own and
+		// nothing on screen but a progress bar, so an upstream that accepts the
+		// connection and then stalls would leave the user looking at "正在准备…"
+		// indefinitely. Aborting turns that into the caught error below, which
+		// surfaces as the retryable failure card.
 		const response = await fetch(upstream, {
 			headers: { Authorization: authorization },
 			cache: "no-store",
+			signal: upstreamSignal(),
 		});
 
 		if (!response.ok) {
@@ -68,9 +76,11 @@ export async function GET(request: NextRequest) {
 		return NextResponse.json(payload);
 	} catch (error) {
 		console.error("Failed to reach AI-Saturn for project shots:", error);
+		// 504 when we gave up waiting, 502 when the connection never carried a
+		// request — see upstream-timeout.ts.
 		return NextResponse.json(
 			{ error: "Failed to reach AI-Saturn" },
-			{ status: 502 },
+			{ status: isUpstreamTimeout(error) ? 504 : 502 },
 		);
 	}
 }

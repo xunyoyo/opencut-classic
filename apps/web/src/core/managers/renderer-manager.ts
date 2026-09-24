@@ -2,6 +2,7 @@ import type { EditorCore } from "@/core";
 import type { RootNode } from "@/services/renderer/nodes/root-node";
 import type { ExportOptions, ExportResult } from "@/export";
 import { CanvasRenderer } from "@/services/renderer/canvas-renderer";
+import { isGpuAvailable } from "@/services/renderer/gpu-renderer";
 import { SceneExporter } from "@/services/renderer/scene-exporter";
 import { buildScene } from "@/services/renderer/scene-builder";
 import { createTimelineAudioBuffer } from "@/media/audio";
@@ -108,11 +109,14 @@ export class RendererManager {
 			tempCanvas.width = canvasSize.width;
 			tempCanvas.height = canvasSize.height;
 
-			await renderer.renderToCanvas({
+			const didRender = await renderer.renderToCanvas({
 				node: renderTree,
 				time: renderTime,
 				targetCanvas: tempCanvas,
 			});
+			if (!didRender) {
+				return { success: false, error: "当前浏览器无法渲染画面，截图不可用" };
+			}
 
 			const blob = await new Promise<Blob | null>((resolve) => {
 				tempCanvas.toBlob((result) => resolve(result), "image/png");
@@ -150,6 +154,18 @@ export class RendererManager {
 		const { format, quality, fps, includeAudio } = options;
 
 		try {
+			// Refused up front rather than left to fail frame by frame: the
+			// encoder reads whatever is on the compositor canvas, so without a
+			// GPU it would happily produce a video-length file of blank frames
+			// and report success. A user who waits out an export and gets an
+			// empty file has lost more than one who is told immediately.
+			if (!isGpuAvailable()) {
+				return {
+					success: false,
+					error: "当前浏览器无法启用 GPU 渲染，导出不可用。请开启浏览器硬件加速后重试",
+				};
+			}
+
 			const tracks = this.editor.scenes.getActiveScene().tracks;
 			const mediaAssets = this.editor.media.getAssets();
 			const activeProject = this.editor.project.getActive();

@@ -170,7 +170,11 @@ function PreviewCanvas({
 	useEffect(() => {
 		const mount = canvasMountRef.current;
 		if (!mount) return;
+		// No GPU, no canvas. Downgrading rather than throwing keeps this out of
+		// React's uncaught error handler, which has no boundary to catch it and
+		// renders an empty screen instead of the editor.
 		const outputCanvas = renderer.getOutputCanvas();
+		if (!outputCanvas) return;
 		outputCanvas.style.display = "block";
 		outputCanvas.style.width = "100%";
 		outputCanvas.style.height = "100%";
@@ -206,7 +210,14 @@ function PreviewCanvas({
 		lastFrameRef.current = frame;
 		renderer
 			.render({ node: renderTree, time: renderTime })
-			.then(() => {
+			// Both handlers are load-bearing. Without the catch, a rejection
+			// leaves `renderingRef` stuck true and this loop skips every
+			// subsequent frame — the preview goes permanently blank and stops
+			// reporting anything, which is strictly worse than the error.
+			.catch((error: unknown) => {
+				console.error("Preview render failed:", error);
+			})
+			.finally(() => {
 				renderingRef.current = false;
 			});
 	}, [renderer, renderTree, editor.playback, editor.timeline]);

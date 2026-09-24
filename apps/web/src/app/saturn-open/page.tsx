@@ -56,38 +56,13 @@ function MissingParams({ reason }: { reason: string | null }) {
 
 	return (
 		<div className="mx-auto max-w-lg px-6 py-16">
-			<h1 className="text-xl font-semibold">从 AI-Saturn 进入剪辑</h1>
-			{expired && (
-				<p className="mt-3 text-sm text-destructive">
-					登录态已失效，请重新从 AI-Saturn 的「剪辑」进入。
-				</p>
-			)}
+			<h1 className="text-xl font-semibold">
+				{expired ? "登录态已失效" : "请从 AI-Saturn 进入剪辑"}
+			</h1>
 			<p className="mt-3 text-sm text-muted-foreground">
-				这个页面需要由 AI-Saturn 跳转进来，URL 上要带登录态：
-			</p>
-			<pre className="mt-4 overflow-x-auto rounded-md bg-muted p-4 text-xs">
-				{`/saturn-open?token=Bearer%20xxx
-/saturn-open?token=Bearer%20xxx&projectId=123&projectName=复仇之路`}
-			</pre>
-			<dl className="mt-4 space-y-1 text-sm text-muted-foreground">
-				<div>
-					<dt className="inline font-medium">token</dt>
-					<dd className="inline"> —— AI-Saturn 的登录令牌（必填）</dd>
-				</div>
-				<div>
-					<dt className="inline font-medium">projectId</dt>
-					<dd className="inline">
-						{" "}
-						—— AI-Saturn 的项目 ID（不填则列出本地已有草稿）
-					</dd>
-				</div>
-				<div>
-					<dt className="inline font-medium">projectName</dt>
-					<dd className="inline"> —— 可选，用于命名新建的草稿</dd>
-				</div>
-			</dl>
-			<p className="mt-6 text-xs text-muted-foreground">
-				草稿保存在这个浏览器本地，不在服务器上；换浏览器或清了浏览器数据就看不到了。
+				{expired
+					? "登录态已失效，请重新打开 AI-Saturn，从「剪辑」进入。"
+					: "请打开 AI-Saturn，从「剪辑」进入此页面。"}
 			</p>
 		</div>
 	);

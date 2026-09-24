@@ -6,6 +6,7 @@ import {
 import type { EffectPass, EffectUniformValue } from "@/effects/types";
 
 let gpuAvailable = false;
+let gpuFailureReason: string | null = null;
 let initPromise: Promise<void> | null = null;
 
 export function initializeGpuRenderer(): Promise<void> {
@@ -13,10 +14,15 @@ export function initializeGpuRenderer(): Promise<void> {
 		initPromise = initializeGpu()
 			.then(() => {
 				gpuAvailable = true;
+				gpuFailureReason = null;
 			})
 			.catch((error: unknown) => {
 				gpuAvailable = false;
 				const message = error instanceof Error ? error.message : String(error);
+				// Kept, not just logged: the editor tells the user why the preview
+				// is blank, and "open it in Chrome" is the wrong thing to say when
+				// the browser is Chrome with hardware acceleration turned off.
+				gpuFailureReason = message;
 				console.warn(`GPU renderer unavailable: ${message}`);
 			});
 	}
@@ -25,6 +31,18 @@ export function initializeGpuRenderer(): Promise<void> {
 
 export function isGpuAvailable(): boolean {
 	return gpuAvailable;
+}
+
+/**
+ * Why GPU initialization failed, or null if it succeeded or has not run yet.
+ *
+ * `initializeGpu()` is rejected by wgpu both when WebGPU is missing and when
+ * the GL fallback cannot get an adapter either — the message is the only thing
+ * that distinguishes "this browser has no GPU path at all" from something
+ * repairable, so it is worth surfacing rather than swallowing.
+ */
+export function getGpuFailureReason(): string | null {
+	return gpuFailureReason;
 }
 
 export const gpuRenderer = {

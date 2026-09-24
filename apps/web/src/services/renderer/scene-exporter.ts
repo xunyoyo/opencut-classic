@@ -99,7 +99,16 @@ export class SceneExporter extends EventEmitter<SceneExporterEvents> {
 			target: new BufferTarget(),
 		});
 
-		const videoSource = new CanvasSource(this.renderer.getOutputCanvas(), {
+		// The compositor canvas is where wgpu draws *and* what this encoder
+		// reads back, so without a GPU there is nothing to read. Returning null
+		// (rather than encoding blank frames) makes `exportProject` report a
+		// real error instead of handing back an empty video.
+		const outputCanvas = this.renderer.getOutputCanvas();
+		if (!outputCanvas) {
+			return null;
+		}
+
+		const videoSource = new CanvasSource(outputCanvas, {
 			codec: this.format === "webm" ? "vp9" : "avc",
 			bitrate: qualityMap[this.quality],
 		});

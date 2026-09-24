@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { storeSaturnToken } from "@/saturn/session";
 import { establishSession } from "@/saturn/session-client";
+import { withDeadline } from "@/saturn/fetch-timeout";
 import { readBrandFromParams, saveBrand } from "@/saturn/brand";
 import {
 	fetchSaturnProjectShots,
@@ -38,6 +39,18 @@ type PrepState =
 	| { status: "idle" }
 	| { status: "working"; label: string }
 	| { status: "failed"; message: string };
+
+/**
+ * How long the prep screen may sit on one label before it declares failure.
+ *
+ * Set well above the per-request deadlines (`fetch-timeout.ts`, 20s) so that a
+ * slow-but-working step is never cut short — those produce a specific,
+ * actionable error on their own. This is the backstop for the case they cannot
+ * cover: `working` set with nothing pending to abort. Measured from the last
+ * label change, so it restarts as the flow advances rather than capping the
+ * whole sequence.
+ */
+const PREP_STALL_TIMEOUT_MS = 45_000;
 
 // ---------------------------------------------------------------------------
 // Explainer when the page is opened without the parameters the platform sends
@@ -309,7 +322,18 @@ function SaturnOpen() {
 				// get a second draft forked off their work.
 				// (`saturnLaidOut` keeps its name from when the build meant laying
 				// out a timeline; it is now the "built, not a husk" flag.)
-				const all = await storageService.loadAllProjectsMetadata();
+				// Read under a deadline, and it is not optional here.
+				//
+				// `getDB()` bounds *opening* the database, but the store requests
+				// that follow carry only an `onerror` handler — and a request the
+				// browser never answers fires neither `success` nor `error`. It
+				// simply never settles, which leaves this `await` pending with
+				// `working` on screen and nothing to abort. `withDeadline` is what
+				// turns that into the catch below.
+				const all = await withDeadline({
+					work: storageService.loadAllProjectsMetadata(),
+					message: "读取本地草稿超时。请关闭其他剪辑器标签页后重试。",
+				});
 				const existing = all
 					.filter(
 						(p) => p.saturnProjectId === targetProjectId && p.saturnLaidOut,
@@ -324,7 +348,7 @@ function SaturnOpen() {
 					// Reopening a draft the user already has, so a `from` they were
 				// interrupted on is a place they can actually be returned to.
 				openDraft(existing.id, { resume: true });
-					return;
+				return;
 				}
 
 				// No draft yet. Creation belongs to the editor (it needs a mounted
@@ -355,6 +379,41 @@ function SaturnOpen() {
 		void prepare(projectId);
 	}, [token, projectId, prepare]);
 
+	// The last line of defence for the project path.
+	//
+	// Every await in `prepare()` now has its own deadline, so it should always
+	// reach its catch and render the failure card. This exists for the one case
+	// those deadlines cannot cover: a bug *inside* `prepare()` between steps —
+	// code that throws in a way, or blocks in a way, that leaves `working` set
+	// with nothing pending to abort. The consequence of not having it is the
+	// worst state this page can be in: a spinner made of a CSS animation, which
+	// looks identical whether the work is progressing or long dead, with the
+	// retry button unreachable because `onRetry` only renders on `failed`.
+	//
+	// Keyed on the label so a progressing flow resets the clock — the labels
+	// advance as each step completes, so this fires only on a label that has
+	// not moved. The deadline is deliberately generous: it is a floor below
+	// which something is definitely wrong, not a target for normal operation.
+	//
+	// Extracted to a variable rather than inlined because the dependency has to
+	// be statically checkable; React compares objects by reference, and every
+	// `setState` here builds a new one, so depending on `state` itself would
+	// restart the timer on any re-render at all — including the ones this
+	// timer's own firing causes.
+	const stallStatus = state.status;
+	const stallLabel = state.status === "working" ? state.label : null;
+	useEffect(() => {
+		if (stallStatus !== "working") return;
+		const timer = setTimeout(() => {
+			setState({
+				status: "failed",
+				message:
+					"准备剪辑项目耗时过长，已中止。请重试，或回到 AI-Saturn 重新进入。",
+			});
+		}, PREP_STALL_TIMEOUT_MS);
+		return () => clearTimeout(timer);
+	}, [stallStatus, stallLabel]);
+
 	// No projectId — surface the drafts this browser already has.
 	useEffect(() => {
 		if (!token || Number.isFinite(projectId)) return;
@@ -377,19 +436,29 @@ function SaturnOpen() {
 				return;
 			}
 
-			// Separated from the session exchange above, and unable to throw: the
-			// only thing that moves the render past the skeleton is `setPickerData`,
-			// so a rejection here would leave the page on two pulsing bars forever
-			// with no failure card and no retry — a worse outcome than an empty
-			// list, which at least says something.
+			// Separated from the session exchange above so that a failure here
+			// still lands on the picker rather than the failure card: a read that
+			// throws means "we could not list your drafts", which the picker can
+			// say, and is not a reason to refuse to show the page at all.
 			//
 			// `projectListFailed` is carried rather than folded into `projects: []`
 			// because the picker reads an absent draft as "this one was deleted",
 			// which would tell the user their work is gone when the truth is that
 			// the read failed.
+			//
+			// The deadline, though, is not negotiable — `.catch()` alone cannot
+			// save this branch. A reject is handled; a promise that never settles
+			// is not, and `Promise.all` waits forever, so `setPickerData` never
+			// runs and the two skeleton bars below stay up with no failure card
+			// and no retry. `getDB()` guards opening the database, not the store
+			// requests that follow it, so that is a reachable state, not a
+			// theoretical one.
 			const [prefetches, projects] = await Promise.all([
 				Promise.resolve(listShotPrefetches()),
-				storageService.loadAllProjectsMetadata().catch(() => null),
+				withDeadline({
+					work: storageService.loadAllProjectsMetadata(),
+					message: "读取本地草稿超时",
+				}).catch(() => null),
 			]);
 			setPickerData({
 				prefetches,

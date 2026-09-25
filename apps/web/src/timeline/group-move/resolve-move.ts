@@ -137,10 +137,7 @@ function resolveNewTrackMove({
 		(leftMember, rightMember) =>
 			leftMember.displayIndex - rightMember.displayIndex,
 	);
-	const anchorMemberIndex = sortedMembers.findIndex(
-		(member) => member.elementId === group.anchor.elementId,
-	);
-	if (anchorMemberIndex < 0 || newTrackIds.length < sortedMembers.length) {
+	if (sortedMembers.length === 0) {
 		return null;
 	}
 
@@ -154,6 +151,35 @@ function resolveNewTrackMove({
 		return null;
 	}
 
+	// One new track per *source* track, not per element. The members already
+	// share a track and are dragged as a block, so giving each element its own
+	// track would fan a single row of captions into a staircase. Ordered top to
+	// bottom so the block keeps its internal layout and the anchor's position
+	// within the block still determines where the block lands.
+	const sortedSourceTrackIds = [
+		...new Set(sortedMembers.map((member) => member.trackId)),
+	].sort((leftTrackId, rightTrackId) => {
+		const leftDisplayIndex = getTrackPlacementById({
+			tracks,
+			trackId: leftTrackId,
+		})?.displayIndex;
+		const rightDisplayIndex = getTrackPlacementById({
+			tracks,
+			trackId: rightTrackId,
+		})?.displayIndex;
+		return (leftDisplayIndex ?? 0) - (rightDisplayIndex ?? 0);
+	});
+	if (newTrackIds.length < sortedSourceTrackIds.length) {
+		return null;
+	}
+
+	const anchorSourceTrackIndex = sortedSourceTrackIds.indexOf(
+		group.anchor.trackId,
+	);
+	if (anchorSourceTrackIndex < 0) {
+		return null;
+	}
+
 	const clampedAnchorStartTime = clampAnchorStartTime({
 		group,
 		tracks,
@@ -163,25 +189,40 @@ function resolveNewTrackMove({
 	const blockStartIndex = hasAudioMember
 		? clampAudioInsertIndex({
 				tracks,
-				insertIndex: anchorInsertIndex - anchorMemberIndex,
+				insertIndex: anchorInsertIndex - anchorSourceTrackIndex,
 			})
 		: Math.max(
 				0,
-				Math.min(anchorInsertIndex - anchorMemberIndex, tracks.overlay.length),
+				Math.min(
+					anchorInsertIndex - anchorSourceTrackIndex,
+					tracks.overlay.length,
+				),
 			);
 
-	const createTracks: PlannedTrackCreation[] = sortedMembers.map(
-		(member, memberIndex) => ({
-			id: newTrackIds[memberIndex],
+	// A source track's element type decides its new track's type; every member of
+	// one track shares it, so any member will answer for it.
+	const elementTypeBySourceTrackId = new Map(
+		sortedMembers.map((member) => [member.trackId, member.elementType]),
+	);
+	const createTracks: PlannedTrackCreation[] = sortedSourceTrackIds.map(
+		(sourceTrackId, sourceTrackIndex) => ({
+			id: newTrackIds[sourceTrackIndex],
 			type: getTrackTypeForElementType({
-				elementType: member.elementType,
+				elementType: elementTypeBySourceTrackId.get(sourceTrackId) ?? "video",
 			}),
-			index: blockStartIndex + memberIndex,
+			index: blockStartIndex + sourceTrackIndex,
 		}),
 	);
-	const moves = sortedMembers.map((member, memberIndex) => ({
+	const targetTrackIdBySourceTrackId = new Map(
+		sortedSourceTrackIds.map((sourceTrackId, sourceTrackIndex) => [
+			sourceTrackId,
+			newTrackIds[sourceTrackIndex],
+		]),
+	);
+	const moves = sortedMembers.map((member) => ({
 		sourceTrackId: member.trackId,
-		targetTrackId: newTrackIds[memberIndex],
+		targetTrackId:
+			targetTrackIdBySourceTrackId.get(member.trackId) ?? member.trackId,
 		elementId: member.elementId,
 		newStartTime: addMediaTime({
 			a: clampedAnchorStartTime,
@@ -222,15 +263,21 @@ function resolveExistingTrackIdsByElementId({
 	tracks: SceneTracks;
 	anchorTargetDisplayIndex: number;
 }): Map<string, string> | null {
-	const sortedMembers = [...group.members].sort(
-		(leftMember, rightMember) =>
-			leftMember.displayIndex - rightMember.displayIndex,
-	);
-	const anchorMemberIndex = sortedMembers.findIndex(
-		(member) => member.elementId === group.anchor.elementId,
-	);
-	if (anchorMemberIndex < 0) {
-		return null;
+	// A selection that already shares one track is a block, not a stack: the
+	// members keep their relative offsets in time and their track never needs to
+	// change. Handing each member its own track here is what turned a sideways
+	// caption drag into a staircase of new text tracks, because a subtitle
+	// timeline has exactly one text track and every "find me a free track" walk
+	// therefore failed.
+	const sharedSourceTrackId = resolveSharedSourceTrackId({ group });
+	if (
+		sharedSourceTrackId !== null &&
+		getTrackPlacementById({ tracks, trackId: sharedSourceTrackId })
+			?.displayIndex === anchorTargetDisplayIndex
+	) {
+		return new Map(
+			group.members.map((member) => [member.elementId, sharedSourceTrackId]),
+		);
 	}
 
 	const targetTrackIdsByElementId = new Map<string, string>();
@@ -243,101 +290,74 @@ function resolveExistingTrackIdsByElementId({
 		return null;
 	}
 
-	targetTrackIdsByElementId.set(
-		group.anchor.elementId,
-		anchorPlacement.trackId,
-	);
-	usedTrackIds.add(anchorPlacement.trackId);
-
-	let upperBoundaryIndex = anchorTargetDisplayIndex;
-	for (
-		let memberIndex = anchorMemberIndex - 1;
-		memberIndex >= 0;
-		memberIndex -= 1
-	) {
-		const member = sortedMembers[memberIndex];
-		const targetPlacement = findCompatibleTrackPlacement({
-			tracks,
-			requiredTrackType: getTrackTypeForElementType({
-				elementType: member.elementType,
-			}),
-			startDisplayIndex: upperBoundaryIndex - 1,
-			step: -1,
-			usedTrackIds,
-		});
-		if (!targetPlacement) {
-			return null;
-		}
-
-		targetTrackIdsByElementId.set(member.elementId, targetPlacement.trackId);
-		usedTrackIds.add(targetPlacement.trackId);
-		upperBoundaryIndex = targetPlacement.displayIndex;
+	// Members on differing source tracks move as a block: one vertical delta for
+	// all of them, derived from the anchor's own travel. Letting each member grab
+	// the nearest compatible track instead reorders them, so a selection spanning
+	// two text tracks can collapse onto one, or swap.
+	const anchorSourcePlacement = getTrackPlacementById({
+		tracks,
+		trackId: group.anchor.trackId,
+	});
+	if (!anchorSourcePlacement) {
+		return null;
 	}
 
-	let lowerBoundaryIndex = anchorTargetDisplayIndex;
-	for (
-		let memberIndex = anchorMemberIndex + 1;
-		memberIndex < sortedMembers.length;
-		memberIndex += 1
-	) {
-		const member = sortedMembers[memberIndex];
-		const targetPlacement = findCompatibleTrackPlacement({
+	const displayIndexDelta =
+		anchorTargetDisplayIndex - anchorSourcePlacement.displayIndex;
+	for (const member of group.members) {
+		const sourcePlacement = getTrackPlacementById({
 			tracks,
-			requiredTrackType: getTrackTypeForElementType({
-				elementType: member.elementType,
-			}),
-			startDisplayIndex: lowerBoundaryIndex + 1,
-			step: 1,
-			usedTrackIds,
+			trackId: member.trackId,
+		});
+		if (!sourcePlacement) {
+			return null;
+		}
+
+		const targetPlacement = getTrackPlacementByDisplayIndex({
+			tracks,
+			displayIndex: sourcePlacement.displayIndex + displayIndexDelta,
 		});
 		if (!targetPlacement) {
 			return null;
 		}
 
+		const requiredTrackType = getTrackTypeForElementType({
+			elementType: member.elementType,
+		});
+		if (targetPlacement.trackType !== requiredTrackType) {
+			return null;
+		}
+
+		if (usedTrackIds.has(targetPlacement.trackId)) {
+			return null;
+		}
+
 		targetTrackIdsByElementId.set(member.elementId, targetPlacement.trackId);
 		usedTrackIds.add(targetPlacement.trackId);
-		lowerBoundaryIndex = targetPlacement.displayIndex;
 	}
 
 	return targetTrackIdsByElementId;
 }
 
-function findCompatibleTrackPlacement({
-	tracks,
-	requiredTrackType,
-	startDisplayIndex,
-	step,
-	usedTrackIds,
+/**
+ * The track every member starts on, or null when the selection spans more than
+ * one. A shared source track is the common case for a caption block and lets the
+ * move keep its tracks without any searching.
+ */
+function resolveSharedSourceTrackId({
+	group,
 }: {
-	tracks: SceneTracks;
-	requiredTrackType: ReturnType<typeof getTrackTypeForElementType>;
-	startDisplayIndex: number;
-	step: -1 | 1;
-	usedTrackIds: Set<string>;
-}) {
-	for (
-		let displayIndex = startDisplayIndex;
-		displayIndex >= 0 &&
-		displayIndex < tracks.overlay.length + 1 + tracks.audio.length;
-		displayIndex += step
-	) {
-		const placement = getTrackPlacementByDisplayIndex({
-			tracks,
-			displayIndex,
-		});
-		if (!placement) {
-			continue;
-		}
-
-		if (
-			placement.trackType === requiredTrackType &&
-			!usedTrackIds.has(placement.trackId)
-		) {
-			return placement;
-		}
+	group: MoveGroup;
+}): string | null {
+	if (group.members.length === 0) {
+		return null;
 	}
 
-	return null;
+	const [firstMember, ...otherMembers] = group.members;
+	const sharedTrackId = firstMember.trackId;
+	return otherMembers.some((member) => member.trackId !== sharedTrackId)
+		? null
+		: sharedTrackId;
 }
 
 function clampAnchorStartTime({

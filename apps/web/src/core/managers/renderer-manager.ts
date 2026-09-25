@@ -6,6 +6,7 @@ import { isGpuAvailable } from "@/services/renderer/gpu-renderer";
 import { SceneExporter } from "@/services/renderer/scene-exporter";
 import { buildScene } from "@/services/renderer/scene-builder";
 import { createTimelineAudioBuffer } from "@/media/audio";
+import { exportTimelineAudio } from "@/media/audio-export";
 import { formatTimecode } from "opencut-wasm";
 import { frameRateToFloat } from "@/fps/utils";
 import { downloadBlob } from "@/utils/browser";
@@ -126,7 +127,10 @@ export class RendererManager {
 				return { success: false, error: "生成图片失败" };
 			}
 
-			const timecode = formatTimecode({ time: renderTime, rate: fps })!.replace(/:/g, "-");
+			const timecode = formatTimecode({ time: renderTime, rate: fps })!.replace(
+				/:/g,
+				"-",
+			);
 			const safeName =
 				activeProject.metadata.name.replace(/[<>:"/\\|?*]/g, "-").trim() ||
 				"snapshot";
@@ -151,7 +155,7 @@ export class RendererManager {
 		onProgress?: ({ progress }: { progress: number }) => void;
 		onCancel?: () => boolean;
 	}): Promise<ExportResult> {
-		const { format, quality, fps, includeAudio } = options;
+		const { format, quality, fps, includeAudio, range, audio } = options;
 
 		try {
 			// Refused up front rather than left to fail frame by frame: the
@@ -162,7 +166,8 @@ export class RendererManager {
 			if (!isGpuAvailable()) {
 				return {
 					success: false,
-					error: "当前浏览器无法启用 GPU 渲染，导出不可用。请开启浏览器硬件加速后重试",
+					error:
+						"当前浏览器无法启用 GPU 渲染，导出不可用。请开启浏览器硬件加速后重试",
 				};
 			}
 
@@ -182,6 +187,12 @@ export class RendererManager {
 			const exportFps = fps ?? activeProject.settings.fps;
 			const canvasSize = activeProject.settings.canvasSize;
 
+			// The two artifacts encode sequentially and share one progress bar,
+			// so each gets its own slice of it. Frame encoding dominates the wall
+			// clock, hence the larger share. Without the split the bar would step
+			// backwards at the hand-off between the two.
+			const audioProgressStart = audio?.enabled ? 0.6 : 1;
+
 			let audioBuffer: AudioBuffer | null = null;
 			if (includeAudio) {
 				onProgress?.({ progress: 0.05 });
@@ -189,6 +200,12 @@ export class RendererManager {
 					tracks,
 					mediaAssets,
 					duration,
+					// The mixed buffer becomes the whole audio track, and
+					// mediabunny timestamps the first buffer at 0 with no way to
+					// offset it — so the sub-range has to be cut here.
+					range: range
+						? { startTicks: range.start, endTicks: range.end }
+						: undefined,
 				});
 			}
 
@@ -208,13 +225,14 @@ export class RendererManager {
 				quality,
 				shouldIncludeAudio: !!includeAudio,
 				audioBuffer: audioBuffer || undefined,
+				range,
 			});
 
 			exporter.on("progress", (progress) => {
 				const adjustedProgress = includeAudio
 					? 0.05 + progress * 0.95
 					: progress;
-				onProgress?.({ progress: adjustedProgress });
+				onProgress?.({ progress: adjustedProgress * audioProgressStart });
 			});
 
 			let cancelled = false;
@@ -239,9 +257,38 @@ export class RendererManager {
 					return { success: false, error: "导出未能生成文件" };
 				}
 
+				// Produced after the video, not before: the video path is the one
+				// that can fail on the environment (see the GPU guard above), and
+				// paying for a full audio encode first only to fail afterwards
+				// wastes the more expensive of the two halves.
+				//
+				// The range is passed straight through — `exportTimelineAudio`
+				// takes it in timeline ticks and does the `MediaTime` conversion
+				// itself. Omitting it would hand back a video of the selection
+				// next to an audio file covering the whole timeline.
+				const audioResult = audio?.enabled
+					? await exportTimelineAudio({
+							tracks,
+							mediaAssets,
+							totalDuration: duration,
+							format: audio.format,
+							channels: audio.channels,
+							sampleRate: audio.sampleRate,
+							bitrate: audio.bitrate,
+							range: range ? { start: range.start, end: range.end } : undefined,
+							onProgress: ({ progress }) => {
+								onProgress?.({
+									progress:
+										audioProgressStart + progress * (1 - audioProgressStart),
+								});
+							},
+						})
+					: undefined;
+
 				return {
 					success: true,
 					buffer,
+					audio: audioResult,
 				};
 			} finally {
 				clearInterval(cancelInterval);

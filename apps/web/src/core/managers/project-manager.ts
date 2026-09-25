@@ -15,7 +15,10 @@ import { UpdateProjectSettingsCommand } from "@/commands/project";
 import { DEFAULT_BACKGROUND_COLOR } from "@/background/color";
 import { DEFAULT_CANVAS_SIZE } from "@/canvas/sizes";
 import { DEFAULT_FPS } from "@/fps/defaults";
-import { buildDefaultScene, getProjectDurationFromScenes } from "@/timeline/scenes";
+import {
+	buildDefaultScene,
+	getProjectDurationFromScenes,
+} from "@/timeline/scenes";
 import { buildScene } from "@/services/renderer/scene-builder";
 import { CanvasRenderer } from "@/services/renderer/canvas-renderer";
 import {
@@ -124,6 +127,12 @@ export class ProjectManager {
 			scenes: newProject.scenes,
 			currentSceneId: newProject.currentSceneId,
 		});
+		// A new project replaces the timeline wholesale, so the previous project's
+		// history stops being applicable the moment the scenes above are swapped.
+		// This is reachable without closeProject(): the projects list can create
+		// one while the editor singleton still holds another, and loadProject's
+		// already-active guard does not cover a brand new id.
+		this.editor.command.clear();
 
 		try {
 			await storageService.saveProject({ project: newProject });
@@ -160,6 +169,13 @@ export class ProjectManager {
 		await this.ensureStorageMigrations();
 		this.editor.media.clearAllAssets();
 		this.editor.scenes.clearScenes();
+		// The history belongs to the project being replaced. Its entries hold
+		// element and track ids that only exist in that project's timeline, so
+		// an undo reaching across the switch would edit this project's tracks
+		// with ids from a different one — silently, since nothing validates them.
+		// Cleared alongside the media and scenes because those are dropped for the
+		// same reason: nothing from the previous project may survive.
+		this.editor.command.clear();
 
 		try {
 			const result = await storageService.loadProject({ id });
@@ -324,6 +340,12 @@ export class ProjectManager {
 				this.active = null;
 				this.editor.media.clearAllAssets();
 				this.editor.scenes.clearScenes();
+				// The deleted project is the one the history was recorded against,
+				// so its entries now address a timeline that no longer exists —
+				// and the scenes were cleared above, leaving nothing for an undo to
+				// resolve against. Cleared even though the id is not reopened here:
+				// whatever project is opened next inherits this stack otherwise.
+				this.editor.command.clear();
 			}
 
 			this.notify();
@@ -338,6 +360,9 @@ export class ProjectManager {
 
 		this.editor.media.clearAllAssets();
 		this.editor.scenes.clearScenes();
+		// Same reason as loadProject: the open project is gone, and its history
+		// would otherwise be applied to whatever project is opened next.
+		this.editor.command.clear();
 	}
 
 	async renameProject({
@@ -376,8 +401,7 @@ export class ProjectManager {
 		} catch (error) {
 			console.error("Failed to rename project:", error);
 			toast.error("重命名项目失败", {
-				description:
-					error instanceof Error ? error.message : "请重试",
+				description: error instanceof Error ? error.message : "请重试",
 			});
 		}
 	}
@@ -407,14 +431,10 @@ export class ProjectManager {
 
 			if (missingProjectIds.length > 0) {
 				toast.error(
-					missingProjectIds.length === 1
-						? "未找到项目"
-						: "未找到这些项目",
+					missingProjectIds.length === 1 ? "未找到项目" : "未找到这些项目",
 					{
 						description:
-							missingProjectIds.length === 1
-								? "请重试"
-								: "部分项目未找到",
+							missingProjectIds.length === 1 ? "请重试" : "部分项目未找到",
 					},
 				);
 				throw new Error(`Projects not found: ${missingProjectIds.join(", ")}`);
@@ -501,8 +521,7 @@ export class ProjectManager {
 		} catch (error) {
 			console.error("Failed to duplicate projects:", error);
 			toast.error("创建项目副本失败", {
-				description:
-					error instanceof Error ? error.message : "请重试",
+				description: error instanceof Error ? error.message : "请重试",
 			});
 			throw error;
 		}
@@ -559,14 +578,30 @@ export class ProjectManager {
 	async prepareExit(): Promise<void> {
 		if (!this.active) return;
 
+		// The thumbnail and the save are two unrelated things. They used to be
+		// coupled here — the save only ran when the thumbnail had been
+		// regenerated — and since a degraded renderer returns "nothing drawn"
+		// rather than throwing, every exit on a machine without a GPU silently
+		// skipped the flush. The pending edits then died with `closeProject()`
+		// one line later. The thumbnail is a nicety; the save is the user's work.
+		//
+		// Awaited before the caller's `closeProject()`, which clears the scenes
+		// and media this save reads from.
 		try {
-			const didUpdateThumbnail = await this.updateThumbnailFromTimeline();
-			if (didUpdateThumbnail) {
-				await this.editor.save.flush();
-			}
+			await this.updateThumbnailFromTimeline();
 		} catch (error) {
+			// Best-effort only: a failure here must not abort the exit, and it is
+			// not a reason to skip the save below either.
 			console.error("Failed to generate project thumbnail on exit:", error);
 		}
+
+		// Unconditional, and outside the catch. `flush` waits for a save that is
+		// already in flight rather than stacking a second write, so this costs
+		// nothing when the debounce just fired. A rejected write surfaces here
+		// as an unhandled rejection instead of a silently dropped exit — but it
+		// must not be given the chance to swallow the exit, hence the caller's
+		// own catch around this call.
+		await this.editor.save.flush();
 	}
 
 	getFilteredAndSortedProjects({

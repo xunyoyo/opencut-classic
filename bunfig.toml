@@ -1,0 +1,7 @@
+# `preload` paths resolve against the directory `bun test` runs from, not against
+# this file and not against the repo root. The stub is registered only when the
+# suite is invoked from the repo root (`bun test`); running it from `apps/web`
+# silently skips the missing preload and the vendored wasm package crashes on
+# import instead. Both root `package.json` scripts and CI invoke it from the root.
+[test]
+preload = ["./apps/web/src/test/wasm-test-stub.ts"]

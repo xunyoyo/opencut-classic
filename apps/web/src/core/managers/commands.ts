@@ -10,11 +10,26 @@ interface CommandHistoryEntry {
 	selectionOverride?: EditorSelectionSnapshot;
 }
 
+/**
+ * Depth cap on the undo stack.
+ *
+ * Every entry pins a command that holds a full `savedState` tracks snapshot plus
+ * a selection snapshot, so an unbounded stack grows without limit over a long
+ * editing session — the retained track trees dominate the editor's memory. The
+ * cap is deliberately far larger than any realistic "I need to go further back"
+ * reach, so trimming is invisible to users while keeping the ceiling bounded.
+ *
+ * Entries are dropped from the *front*: undo has to replay the most recent
+ * commands first, so the stale entries are the ones at the bottom of the stack.
+ */
+const MAX_HISTORY_DEPTH = 100;
+
 export class CommandManager {
 	public isRippleEnabled = false;
 	private history: CommandHistoryEntry[] = [];
 	private redoStack: CommandHistoryEntry[] = [];
 	private reactors: Array<() => void> = [];
+	private listeners = new Set<() => void>();
 
 	constructor(private editor: EditorCore) {}
 
@@ -27,25 +42,36 @@ export class CommandManager {
 		this.applyRippleIfEnabled({ beforeTracks });
 		const selectionOverride = this.applySelectionOverride(result);
 		this.runReactors();
-		this.history.push({
-			command,
-			previousSelection,
-			selectionOverride,
+		this.pushHistoryEntry({
+			entry: {
+				command,
+				previousSelection,
+				selectionOverride,
+			},
 		});
 		this.redoStack = [];
+		this.notify();
 		return command;
 	}
 
 	push({ command }: { command: Command }): void {
-		this.history.push({
-			command,
-			previousSelection: this.getSelectionSnapshot(),
+		this.pushHistoryEntry({
+			entry: {
+				command,
+				previousSelection: this.getSelectionSnapshot(),
+			},
 		});
 		this.redoStack = [];
+		this.notify();
 	}
 
 	registerReactor(reactor: () => void): void {
 		this.reactors.push(reactor);
+	}
+
+	subscribe(listener: () => void): () => void {
+		this.listeners.add(listener);
+		return () => this.listeners.delete(listener);
 	}
 
 	undo(): void {
@@ -65,6 +91,7 @@ export class CommandManager {
 			}
 			this.redoStack.push(entry);
 		}
+		this.notify();
 	}
 
 	redo(): void {
@@ -83,11 +110,14 @@ export class CommandManager {
 		const selectionOverride = this.applySelectionOverride(result);
 		this.runReactors();
 
-		this.history.push({
-			command: entry.command,
-			previousSelection,
-			selectionOverride,
+		this.pushHistoryEntry({
+			entry: {
+				command: entry.command,
+				previousSelection,
+				selectionOverride,
+			},
 		});
+		this.notify();
 	}
 
 	canUndo(): boolean {
@@ -98,9 +128,36 @@ export class CommandManager {
 		return this.redoStack.length > 0;
 	}
 
+	/**
+	 * Drops the whole history. Callers must invoke this whenever the active
+	 * project changes: entries hold element/track ids that only mean something
+	 * inside the timeline they were recorded against, so keeping them across a
+	 * project switch lets an undo write the previous project's ids into the new
+	 * project's tracks.
+	 */
 	clear(): void {
+		const hadEntries = this.history.length > 0 || this.redoStack.length > 0;
 		this.history = [];
 		this.redoStack = [];
+		// Only wake subscribers on an actual change — callers clear defensively
+		// (including for projects that never recorded anything), and notifying
+		// unconditionally would re-render every editor subscriber on each load.
+		if (hadEntries) {
+			this.notify();
+		}
+	}
+
+	private pushHistoryEntry({ entry }: { entry: CommandHistoryEntry }): void {
+		this.history.push(entry);
+		if (this.history.length > MAX_HISTORY_DEPTH) {
+			this.history.splice(0, this.history.length - MAX_HISTORY_DEPTH);
+		}
+	}
+
+	private notify(): void {
+		for (const listener of this.listeners) {
+			listener();
+		}
 	}
 
 	private getSelectionSnapshot(): EditorSelectionSnapshot {

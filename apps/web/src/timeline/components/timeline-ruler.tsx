@@ -18,6 +18,12 @@ interface TimelineRulerProps {
 	handleTimelineContentClick: (e: React.MouseEvent) => void;
 	handleRulerTrackingMouseDown: (e: React.MouseEvent) => void;
 	handleRulerMouseDown: (e: React.MouseEvent) => void;
+	/**
+	 * Claims the mousedown for range selection. Returns true when it did, in
+	 * which case the playhead/seek handlers are skipped — they would otherwise
+	 * also start a scrub from the same event.
+	 */
+	handleTimeRangeMouseDown: (event: React.MouseEvent) => boolean;
 }
 
 export function TimelineRuler({
@@ -29,6 +35,7 @@ export function TimelineRuler({
 	handleTimelineContentClick,
 	handleRulerTrackingMouseDown,
 	handleRulerMouseDown,
+	handleTimeRangeMouseDown,
 }: TimelineRulerProps) {
 	const durationTicks = useEditor((e) => e.timeline.getTotalDuration());
 	const durationSeconds = mediaTimeToSeconds({ time: durationTicks });
@@ -115,7 +122,14 @@ export function TimelineRuler({
 					handleTimelineContentClick(event);
 				}
 			}}
-			onMouseDown={handleRulerTrackingMouseDown}
+			onMouseDown={(event) => {
+				// Shift-drag builds an export range. Claimed before the other
+				// handlers so a single mousedown cannot both start a range and
+				// start scrubbing; a Shift-press that never passes the drag
+				// threshold stays a click and still seeks.
+				if (handleTimeRangeMouseDown(event)) return;
+				handleRulerTrackingMouseDown(event);
+			}}
 			onKeyDown={() => {}}
 		>
 			<div
@@ -126,7 +140,13 @@ export function TimelineRuler({
 					height: TIMELINE_RULER_HEIGHT_PX,
 					width: `${dynamicTimelineWidth}px`,
 				}}
-				onMouseDown={handleRulerMouseDown}
+				onMouseDown={(event) => {
+					// The inner element carries the playhead scrub; it must be
+					// suppressed for a Shift-drag too, or the playhead would
+					// lurch to the range edge while the range is being drawn.
+					if (handleTimeRangeMouseDown(event)) return;
+					handleRulerMouseDown(event);
+				}}
 			>
 				{timelineTicks}
 			</div>

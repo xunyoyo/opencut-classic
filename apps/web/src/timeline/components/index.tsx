@@ -68,6 +68,9 @@ import {
 } from "./expanded-layout";
 import { TIMELINE_HORIZONTAL_WHEEL_STEP_PX } from "./interaction";
 import { TimelineToolbar } from "./timeline-toolbar";
+import { TimeRangeOverlay } from "./time-range-overlay";
+import { useTimeRangeDrag } from "@/timeline/time-range/hooks/use-time-range-drag";
+import { useTimeRangeStore } from "@/timeline/time-range";
 import { useElementSelection } from "@/timeline/hooks/element/use-element-selection";
 import { useTimelineSeek } from "@/timeline/hooks/use-timeline-seek";
 import { useTimelineDragDrop } from "@/timeline/hooks/use-timeline-drag-drop";
@@ -302,12 +305,12 @@ export function Timeline() {
 
 	const { dragView, handleElementMouseDown, handleElementClick } =
 		useElementInteraction({
-		zoomLevel,
-		tracksContainerRef,
-		tracksScrollRef,
-		snappingEnabled,
-		onSnapPointChange: handleSnapPointChange,
-	});
+			zoomLevel,
+			tracksContainerRef,
+			tracksScrollRef,
+			snappingEnabled,
+			onSnapPointChange: handleSnapPointChange,
+		});
 	const isElementDragging = dragView.kind === "dragging";
 
 	const {
@@ -335,6 +338,24 @@ export function Timeline() {
 		tracksScrollRef,
 		zoomLevel,
 	});
+
+	const {
+		isDraggingTimeRange,
+		handleTimeRangeMouseDown,
+		lastMouseXRef: timeRangeLastMouseXRef,
+	} = useTimeRangeDrag({
+		zoomLevel,
+		scrollRef: tracksScrollRef,
+		snappingEnabled,
+		onSnapPointChange: handleSnapPointChange,
+	});
+	const clearTimeRange = useTimeRangeStore((state) => state.clearRange);
+
+	// A range only makes sense for the timeline it was drawn on; switching
+	// scenes would otherwise leave a highlight pointing at unrelated content.
+	useEffect(() => {
+		clearTimeRange();
+	}, [scene?.id, clearTimeRange]);
 
 	const {
 		selectionBox,
@@ -403,6 +424,14 @@ export function Timeline() {
 		contentWidth: dynamicTimelineWidth,
 	});
 
+	useEdgeAutoScroll({
+		isActive: isDraggingTimeRange,
+		getMouseClientX: () => timeRangeLastMouseXRef.current,
+		rulerScrollRef,
+		tracksScrollRef,
+		contentWidth: dynamicTimelineWidth,
+	});
+
 	const showSnapIndicator =
 		snappingEnabled &&
 		currentSnapPoint !== null &&
@@ -455,9 +484,7 @@ export function Timeline() {
 					className="relative isolate flex flex-1 flex-col overflow-hidden"
 					ref={tracksContainerRef}
 				>
-					<SelectionBox
-						bounds={selectionBox?.bounds ?? null}
-					/>
+					<SelectionBox bounds={selectionBox?.bounds ?? null} />
 					<DragLine
 						dropTarget={dropTarget}
 						tracks={tracks}
@@ -486,6 +513,9 @@ export function Timeline() {
 								handleTimelineContentClick={handleRulerClick}
 								handleRulerTrackingMouseDown={handleRulerMouseDown}
 								handleRulerMouseDown={handlePlayheadRulerMouseDown}
+								handleTimeRangeMouseDown={(event) =>
+									handleTimeRangeMouseDown({ event })
+								}
 							/>
 							<TimelineBookmarksRow
 								zoomLevel={zoomLevel}
@@ -583,6 +613,12 @@ export function Timeline() {
 						isSnappingToPlayhead={
 							showSnapIndicator && currentSnapPoint?.type === "playhead"
 						}
+					/>
+					<TimeRangeOverlay
+						zoomLevel={zoomLevel}
+						timelineRef={timelineRef}
+						tracksScrollRef={tracksScrollRef}
+						hasHorizontalScrollbar={hasHorizontalScrollbar}
 					/>
 				</div>
 				<SnapIndicator
@@ -780,8 +816,8 @@ function TimelineTrackRows({
 	const draggingElementIds = useMemo(
 		() =>
 			dragView.kind === "dragging"
-			? dragView.memberTimeOffsets
-			: (null as ReadonlyMap<string, MediaTime> | null),
+				? dragView.memberTimeOffsets
+				: (null as ReadonlyMap<string, MediaTime> | null),
 		[dragView],
 	);
 	const sortedTracks = useMemo(() => {

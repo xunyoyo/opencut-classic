@@ -205,9 +205,7 @@ export function EditorProvider({ projectId, children }: EditorProviderProps) {
 						delete (window as Window & { __wasmPanic?: string }).__wasmPanic;
 						setError(wasmPanic);
 					} else {
-						setError(
-							err instanceof Error ? err.message : "加载项目失败",
-						);
+						setError(err instanceof Error ? err.message : "加载项目失败");
 					}
 					setIsLoading(false);
 				}
@@ -360,9 +358,12 @@ function SaturnMediaSync() {
 					// "the project has no renders", which is the one thing we know
 					// is false — every shot in the batch had a video URL.
 					if (failed > 0) {
-						toast.error(`成片导入失败（${failed} 个都没取到），可重新进入项目重试`, {
-							id: toastId,
-						});
+						toast.error(
+							`成片导入失败（${failed} 个都没取到），可重新进入项目重试`,
+							{
+								id: toastId,
+							},
+						);
 						return;
 					}
 					toast.info("没有可导入的成片", { id: toastId });
@@ -375,10 +376,13 @@ function SaturnMediaSync() {
 				// failed is in the console; the toast says a retry is worth it,
 				// since a failed shot is deliberately not recorded as imported.
 				if (failed > 0) {
-					toast.warning(`素材库新增 ${byShotId.size} 个成片，${failed} 个导入失败`, {
-						id: toastId,
-						description: "重新进入项目可以重试失败的成片",
-					});
+					toast.warning(
+						`素材库新增 ${byShotId.size} 个成片，${failed} 个导入失败`,
+						{
+							id: toastId,
+							description: "重新进入项目可以重试失败的成片",
+						},
+					);
 					return;
 				}
 
@@ -425,8 +429,42 @@ function EditorRuntimeBindings() {
 			(event as unknown as { returnValue: string }).returnValue = "";
 		};
 
+		// Last-chance flush, wired to the lifecycle events that fire on the ways
+		// out this editor does not handle itself: a reload, a tab close, a
+		// backgrounded tab on mobile being discarded. `pagehide` is the reliable
+		// one — `beforeunload` is unreliable on mobile and is not sent for an
+		// in-app navigation at all.
+		//
+		// The write cannot be awaited across the boundary here: the page may be
+		// gone before the IndexedDB transaction commits. It is still worth
+		// starting, because the navigation is often a same-document one with
+		// time to spare, and because IndexedDB commits survive a page close once
+		// they have been handed to the browser.
+		//
+		// Gated on `getIsDirty` for both events. `visibilitychange` fires for
+		// every tab switch, window blur and window focus, and every monitor
+		// change; flushing unconditionally would serialize the whole project on
+		// each one. `getIsDirty` is the existing answer to "is there anything to
+		// write" — a debounced save already in flight counts as dirty, and the
+		// flush below joins it rather than stacking a second write.
+		const flushPendingSave = () => {
+			if (!editor.save.getIsDirty()) return;
+			void editor.save.flush();
+		};
+
+		const handleVisibilityChange = () => {
+			if (document.visibilityState !== "hidden") return;
+			flushPendingSave();
+		};
+
 		window.addEventListener("beforeunload", handleBeforeUnload);
-		return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+		window.addEventListener("pagehide", flushPendingSave);
+		document.addEventListener("visibilitychange", handleVisibilityChange);
+		return () => {
+			window.removeEventListener("beforeunload", handleBeforeUnload);
+			window.removeEventListener("pagehide", flushPendingSave);
+			document.removeEventListener("visibilitychange", handleVisibilityChange);
+		};
 	}, [editor]);
 
 	useEditorActions();

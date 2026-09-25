@@ -10,6 +10,12 @@ export class SaveManager {
 	private isSaving = false;
 	private hasPendingSave = false;
 	private saveTimer: ReturnType<typeof setTimeout> | null = null;
+	/**
+	 * The write currently in flight, or null. Tracked so `flush` can wait for
+	 * it instead of colliding with `saveNow`'s `isSaving` early return — see
+	 * the comment there.
+	 */
+	private savePromise: Promise<void> | null = null;
 	private unsubscribeHandlers: Array<() => void> = [];
 
 	constructor({
@@ -64,6 +70,15 @@ export class SaveManager {
 
 	async flush(): Promise<void> {
 		this.hasPendingSave = true;
+
+		// A save already in flight cannot be joined by re-entering `saveNow` —
+		// it returns early on `isSaving`, which would hand the caller a "flushed"
+		// that never happened and leave the newest edits waiting on a debounce
+		// timer that the caller is about to make unmountable. Waiting the write
+		// out and then saving again is what makes this a flush rather than a
+		// nudge: the exit path depends on it, and `closeProject` clears the
+		// scenes immediately afterwards.
+		await this.savePromise;
 		await this.saveNow();
 	}
 
@@ -85,7 +100,7 @@ export class SaveManager {
 		if (this.isSaving) return;
 		if (!this.hasPendingSave) return;
 
-		const activeProject = this.editor.project.getActive();
+		const activeProject = this.editor.project.getActiveOrNull();
 		if (!activeProject) return;
 		if (this.editor.project.getIsLoading()) return;
 		if (this.editor.project.getMigrationState().isMigrating) return;
@@ -94,12 +109,27 @@ export class SaveManager {
 		this.hasPendingSave = false;
 		this.clearTimer();
 
+		const write = (async () => {
+			try {
+				await this.editor.project.saveCurrentProject();
+			} finally {
+				this.isSaving = false;
+				if (this.hasPendingSave) {
+					this.queueSave();
+				}
+			}
+		})();
+		this.savePromise = write;
+
 		try {
-			await this.editor.project.saveCurrentProject();
+			await write;
 		} finally {
-			this.isSaving = false;
-			if (this.hasPendingSave) {
-				this.queueSave();
+			// Identity-checked rather than cleared outright: the `finally` above
+			// can queue a re-entrant save that has already replaced the slot, and
+			// nulling it here would disown that write — leaving `flush` awaiting a
+			// resolved promise while a real one was still running.
+			if (this.savePromise === write) {
+				this.savePromise = null;
 			}
 		}
 	}

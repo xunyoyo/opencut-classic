@@ -14,7 +14,7 @@ import type {
 } from "@/timeline";
 import type { Transform } from "@/rendering";
 import { resolveTrackPlacement } from "@/timeline/placement";
-import { mediaTime, ZERO_MEDIA_TIME } from "@/wasm";
+import { mediaTime, ZERO_MEDIA_TIME, type MediaTime } from "@/wasm";
 
 function buildTransform(): Transform {
 	return {
@@ -231,18 +231,22 @@ function buildTrack(params: BuildTrackParams): TimelineTrack {
 	throw new Error(`Unsupported test track type: ${type}`);
 }
 
+// Branded at the signature, not at the call sites: the production type is
+// `PlacementTimeSpan` (../types), whose fields are `MediaTime`. Declaring these
+// as bare `number` let a fractional value through to compile and then throw out
+// of `mediaTime()` at runtime instead.
 function buildTimeSpan({
 	startTime,
 	duration,
 	excludeElementId,
 }: {
-	startTime: number;
-	duration: number;
+	startTime: MediaTime;
+	duration: MediaTime;
 	excludeElementId?: string;
 }) {
 	return {
-		startTime: mediaTime({ ticks: startTime }),
-		duration: mediaTime({ ticks: duration }),
+		startTime,
+		duration,
 		excludeElementId,
 	};
 }
@@ -278,7 +282,12 @@ describe("resolveTrackPlacement", () => {
 			resolveTrackPlacement({
 				tracks,
 				elementType: "text",
-				timeSpans: [buildTimeSpan({ startTime: 2, duration: 3 })],
+				timeSpans: [
+					buildTimeSpan({
+						startTime: mediaTime({ ticks: 2 }),
+						duration: mediaTime({ ticks: 3 }),
+					}),
+				],
 				strategy: { type: "explicit", trackId: "text-1" },
 			}),
 		).toEqual({
@@ -298,7 +307,12 @@ describe("resolveTrackPlacement", () => {
 			resolveTrackPlacement({
 				tracks,
 				elementType: "text",
-				timeSpans: [buildTimeSpan({ startTime: 0, duration: 1 })],
+				timeSpans: [
+					buildTimeSpan({
+						startTime: mediaTime({ ticks: 0 }),
+						duration: mediaTime({ ticks: 1 }),
+					}),
+				],
 				strategy: { type: "explicit", trackId: "missing" },
 			}),
 		).toBeNull();
@@ -307,7 +321,12 @@ describe("resolveTrackPlacement", () => {
 			resolveTrackPlacement({
 				tracks,
 				elementType: "text",
-				timeSpans: [buildTimeSpan({ startTime: 0, duration: 1 })],
+				timeSpans: [
+					buildTimeSpan({
+						startTime: mediaTime({ ticks: 0 }),
+						duration: mediaTime({ ticks: 1 }),
+					}),
+				],
 				strategy: { type: "explicit", trackId: "video-1" },
 			}),
 		).toBeNull();
@@ -331,7 +350,12 @@ describe("resolveTrackPlacement", () => {
 			resolveTrackPlacement({
 				tracks,
 				elementType: "text",
-				timeSpans: [buildTimeSpan({ startTime: 2, duration: 1 })],
+				timeSpans: [
+					buildTimeSpan({
+						startTime: mediaTime({ ticks: 2 }),
+						duration: mediaTime({ ticks: 1 }),
+					}),
+				],
 				strategy: { type: "firstAvailable" },
 			}),
 		).toEqual({
@@ -369,7 +393,12 @@ describe("resolveTrackPlacement", () => {
 			resolveTrackPlacement({
 				tracks,
 				elementType: "graphic",
-				timeSpans: [buildTimeSpan({ startTime: 1, duration: 1 })],
+				timeSpans: [
+					buildTimeSpan({
+						startTime: mediaTime({ ticks: 1 }),
+						duration: mediaTime({ ticks: 1 }),
+					}),
+				],
 				strategy: { type: "firstAvailable" },
 			}),
 		).toEqual({
@@ -389,7 +418,12 @@ describe("resolveTrackPlacement", () => {
 			resolveTrackPlacement({
 				tracks,
 				elementType: "audio",
-				timeSpans: [buildTimeSpan({ startTime: 3, duration: 2 })],
+				timeSpans: [
+					buildTimeSpan({
+						startTime: mediaTime({ ticks: 3 }),
+						duration: mediaTime({ ticks: 2 }),
+					}),
+				],
 				strategy: {
 					type: "preferIndex",
 					trackIndex: 0,
@@ -414,7 +448,12 @@ describe("resolveTrackPlacement", () => {
 			resolveTrackPlacement({
 				tracks,
 				elementType: "graphic",
-				timeSpans: [buildTimeSpan({ startTime: 1, duration: 2 })],
+				timeSpans: [
+					buildTimeSpan({
+						startTime: mediaTime({ ticks: 1 }),
+						duration: mediaTime({ ticks: 2 }),
+					}),
+				],
 				strategy: {
 					type: "preferIndex",
 					trackIndex: 1,
@@ -440,7 +479,12 @@ describe("resolveTrackPlacement", () => {
 			resolveTrackPlacement({
 				tracks,
 				elementType: "audio",
-				timeSpans: [buildTimeSpan({ startTime: 0, duration: 1 })],
+				timeSpans: [
+					buildTimeSpan({
+						startTime: mediaTime({ ticks: 0 }),
+						duration: mediaTime({ ticks: 1 }),
+					}),
+				],
 				strategy: {
 					type: "preferIndex",
 					trackIndex: 0,
@@ -475,7 +519,12 @@ describe("resolveTrackPlacement", () => {
 			resolveTrackPlacement({
 				tracks,
 				elementType: "text",
-				timeSpans: [buildTimeSpan({ startTime: 1, duration: 1 })],
+				timeSpans: [
+					buildTimeSpan({
+						startTime: mediaTime({ ticks: 1 }),
+						duration: mediaTime({ ticks: 1 }),
+					}),
+				],
 				strategy: { type: "aboveSource", sourceTrackIndex: 2 },
 			}),
 		).toEqual({
@@ -510,7 +559,12 @@ describe("resolveTrackPlacement", () => {
 			resolveTrackPlacement({
 				tracks,
 				elementType: "text",
-				timeSpans: [buildTimeSpan({ startTime: 1, duration: 1 })],
+				timeSpans: [
+					buildTimeSpan({
+						startTime: mediaTime({ ticks: 1 }),
+						duration: mediaTime({ ticks: 1 }),
+					}),
+				],
 				strategy: { type: "aboveSource", sourceTrackIndex: 1 },
 			}),
 		).toEqual({
@@ -575,8 +629,16 @@ describe("resolveTrackPlacement", () => {
 				tracks,
 				elementType: "audio",
 				timeSpans: [
-					buildTimeSpan({ startTime: 2.5, duration: 1 }),
-					buildTimeSpan({ startTime: 5.5, duration: 1 }),
+					// The second span lands inside element `b` (5-7), so the batch is
+					// rejected. The first sits in the 2-5 gap, clear of element `a`.
+					buildTimeSpan({
+						startTime: mediaTime({ ticks: 2 }),
+						duration: mediaTime({ ticks: 1 }),
+					}),
+					buildTimeSpan({
+						startTime: mediaTime({ ticks: 5 }),
+						duration: mediaTime({ ticks: 1 }),
+					}),
 				],
 				strategy: { type: "firstAvailable" },
 			}),
@@ -593,7 +655,12 @@ describe("resolveTrackPlacement", () => {
 			resolveTrackPlacement({
 				tracks: buildSceneTracks({}),
 				elementType: "video",
-				timeSpans: [buildTimeSpan({ startTime: 0, duration: 3 })],
+				timeSpans: [
+					buildTimeSpan({
+						startTime: mediaTime({ ticks: 0 }),
+						duration: mediaTime({ ticks: 3 }),
+					}),
+				],
 				strategy: {
 					type: "preferIndex",
 					trackIndex: 0,
@@ -640,7 +707,12 @@ describe("resolveTrackPlacement", () => {
 			resolveTrackPlacement({
 				tracks,
 				elementType: "video",
-				timeSpans: [buildTimeSpan({ startTime: 2, duration: 2 })],
+				timeSpans: [
+					buildTimeSpan({
+						startTime: mediaTime({ ticks: 2 }),
+						duration: mediaTime({ ticks: 2 }),
+					}),
+				],
 				strategy: { type: "explicit", trackId: "video-main" },
 			}),
 		).toEqual({
@@ -663,7 +735,12 @@ describe("resolveTrackPlacement", () => {
 			resolveTrackPlacement({
 				tracks,
 				elementType: "audio",
-				timeSpans: [buildTimeSpan({ startTime: 0, duration: 1 })],
+				timeSpans: [
+					buildTimeSpan({
+						startTime: mediaTime({ ticks: 0 }),
+						duration: mediaTime({ ticks: 1 }),
+					}),
+				],
 				strategy: {
 					type: "preferIndex",
 					trackIndex: 0,

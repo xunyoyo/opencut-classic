@@ -13,12 +13,16 @@ import {
 	QUALITY_VERY_HIGH,
 } from "mediabunny";
 import type { FrameRate } from "opencut-wasm";
-import { mediaTimeToSeconds } from "opencut-wasm";
-import { TICKS_PER_SECOND } from "@/wasm";
+import { mediaTime, TICKS_PER_SECOND, type MediaTime } from "@/wasm";
 import { frameRateToFloat } from "@/fps/utils";
 import type { RootNode } from "./nodes/root-node";
 import type { ExportFormat, ExportQuality } from "@/export";
 import { CanvasRenderer } from "./canvas-renderer";
+import {
+	frameIndexToExportSeconds,
+	frameIndexToTimelineTicks,
+	resolveFrameWindow,
+} from "./frame-window";
 
 type ExportParams = {
 	width: number;
@@ -28,6 +32,8 @@ type ExportParams = {
 	quality: ExportQuality;
 	shouldIncludeAudio?: boolean;
 	audioBuffer?: AudioBuffer;
+	/** Absent means the whole timeline. */
+	range?: { start: MediaTime; end: MediaTime };
 };
 
 const qualityMap = {
@@ -50,6 +56,7 @@ export class SceneExporter extends EventEmitter<SceneExporterEvents> {
 	private quality: ExportQuality;
 	private shouldIncludeAudio: boolean;
 	private audioBuffer?: AudioBuffer;
+	private range: { start: MediaTime; end: MediaTime } | null;
 
 	private isCancelled = false;
 
@@ -61,6 +68,7 @@ export class SceneExporter extends EventEmitter<SceneExporterEvents> {
 		quality,
 		shouldIncludeAudio,
 		audioBuffer,
+		range,
 	}: ExportParams) {
 		super();
 		this.renderer = new CanvasRenderer({
@@ -73,6 +81,7 @@ export class SceneExporter extends EventEmitter<SceneExporterEvents> {
 		this.quality = quality;
 		this.shouldIncludeAudio = shouldIncludeAudio ?? false;
 		this.audioBuffer = audioBuffer;
+		this.range = range ?? null;
 	}
 
 	cancel(): void {
@@ -89,7 +98,11 @@ export class SceneExporter extends EventEmitter<SceneExporterEvents> {
 		const ticksPerFrame = Math.round(
 			(TICKS_PER_SECOND * fps.denominator) / fps.numerator,
 		);
-		const frameCount = Math.floor(rootNode.duration / ticksPerFrame);
+		const { startFrame, frameCount, timelineOffsetTicks } = resolveFrameWindow({
+			durationTicks: rootNode.duration,
+			ticksPerFrame,
+			range: this.range,
+		});
 
 		const outputFormat =
 			this.format === "webm" ? new WebMOutputFormat() : new Mp4OutputFormat();
@@ -150,8 +163,19 @@ export class SceneExporter extends EventEmitter<SceneExporterEvents> {
 				return null;
 			}
 
-			const timeTicks = i * ticksPerFrame;
-			const timeSeconds = mediaTimeToSeconds({ time: timeTicks });
+			const frameIndex = startFrame + i;
+			// The renderer is asked for *absolute* timeline time — it draws the
+			// content that lives at that point on the timeline.
+			const timeTicks = mediaTime({
+				ticks: frameIndexToTimelineTicks({ frameIndex, ticksPerFrame }),
+			});
+			// The muxer, by contrast, timestamps samples against the export
+			// file's own zero, so the range offset is subtracted here.
+			const timeSeconds = frameIndexToExportSeconds({
+				frameIndex,
+				ticksPerFrame,
+				timelineOffsetTicks,
+			});
 			await this.renderer.render({ node: rootNode, time: timeTicks });
 			await videoSource.add(timeSeconds, 1 / fpsFloat);
 

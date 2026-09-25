@@ -10,19 +10,15 @@ import {
 	isStorageQuotaExceededError,
 	readStorageQuotaStatus,
 } from "./quota";
-import type {
-	MediaAssetData,
-	StorageConfig,
-	SerializedProject,
-	SerializedScene,
-} from "./types";
+import type { MediaAssetData, StorageConfig, SerializedProject } from "./types";
 import type { SavedSoundsData, SavedSound, SoundEffect } from "@/sounds/types";
 import {
 	migrations,
 	runStorageMigrations,
 } from "@/services/storage/migrations";
-import type { Bookmark, SceneTracks, TScene } from "@/timeline";
+import type { Bookmark, TScene } from "@/timeline";
 import { roundMediaTime } from "@/wasm";
+import { serializeProject } from "@/versions/serialize";
 
 function normalizeBookmarks({ raw }: { raw: unknown }): Bookmark[] {
 	if (!Array.isArray(raw)) return [];
@@ -118,58 +114,19 @@ class StorageService {
 		return isStorageQuotaExceededError({ error });
 	}
 
-	private stripAudioBuffers({ tracks }: { tracks: SceneTracks }): SceneTracks {
-		return {
-			...tracks,
-			audio: tracks.audio.map((track) => ({
-				...track,
-				elements: track.elements.map((element) => {
-					const { buffer: _buffer, ...rest } = element;
-					return rest;
-				}),
-			})),
-		};
-	}
-
 	async saveProject({ project }: { project: TProject }): Promise<void> {
 		const duration =
 			project.metadata.duration ??
 			getProjectDurationFromScenes({ scenes: project.scenes });
-		const serializedScenes: SerializedScene[] = project.scenes.map((scene) => ({
-			id: scene.id,
-			name: scene.name,
-			isMain: scene.isMain,
-			tracks: this.stripAudioBuffers({ tracks: scene.tracks }),
-			bookmarks: scene.bookmarks,
-			createdAt: scene.createdAt.toISOString(),
-			updatedAt: scene.updatedAt.toISOString(),
-		}));
 
-		const serializedProject: SerializedProject = {
-			metadata: {
-				id: project.metadata.id,
-				name: project.metadata.name,
-				thumbnail: project.metadata.thumbnail,
-				duration,
-				createdAt: project.metadata.createdAt.toISOString(),
-				updatedAt: project.metadata.updatedAt.toISOString(),
-				// Carried explicitly: this method enumerates every field by hand,
-				// so any new TProjectMetadata field must be listed here or it is
-				// silently dropped on every save. loadProject and
-				// loadAllProjectsMetadata have the same list and must be kept in sync.
-				...(project.metadata.saturnProjectId !== undefined && {
-					saturnProjectId: project.metadata.saturnProjectId,
-				}),
-				...(project.metadata.saturnLaidOut !== undefined && {
-					saturnLaidOut: project.metadata.saturnLaidOut,
-				}),
-			},
-			scenes: serializedScenes,
-			currentSceneId: project.currentSceneId,
-			settings: project.settings,
-			version: project.version,
-			timelineViewState: project.timelineViewState,
-		};
+		// Shared with the version store's snapshots, so a saved project and a
+		// saved version of that same project are byte-identical. Two copies of
+		// this enumeration would drift, and the next `TProjectMetadata` field
+		// added would be dropped in whichever copy was missed.
+		const serializedProject: SerializedProject = serializeProject({
+			project,
+			duration,
+		});
 
 		await this.projectsAdapter.set({
 			key: project.metadata.id,

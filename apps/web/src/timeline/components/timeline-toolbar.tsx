@@ -27,6 +27,7 @@ import {
 import { hasMediaId } from "@/timeline";
 import { cn } from "@/utils/ui";
 import { useTimelineStore } from "@/timeline/timeline-store";
+import { useTimeRangeStore } from "@/timeline/time-range";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
 	Bookmark02Icon,
@@ -43,8 +44,11 @@ import {
 	Layers01Icon,
 	Chart03Icon,
 	Unlink02Icon,
+	Undo02Icon,
+	CancelSquareIcon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
+import { getPlatformSpecialKey } from "@/utils/platform";
 import { OcRippleIcon } from "@/components/icons";
 import { GraphEditorPopover } from "./graph-editor/popover";
 import { PopoverTrigger } from "@/components/ui/popover";
@@ -95,6 +99,12 @@ function ToolbarLeftSection() {
 	const isCurrentlyBookmarked = useEditor((e) =>
 		e.scenes.isBookmarked({ time: e.playback.getCurrentTime() }),
 	);
+	const canUndo = useEditor((e) => e.command.canUndo());
+	// Subscribed rather than read once via `getState()`: the range is drawn by a
+	// different component (the ruler overlay), so this button has to re-render
+	// when that drag starts and ends to enable itself.
+	const hasRange = useTimeRangeStore((s) => s.hasRange());
+	const clearTimeRange = useTimeRangeStore((s) => s.clearRange);
 	const selectedElement =
 		selectedElements.length === 1
 			? (editor.timeline.getElementsWithTracks({
@@ -198,6 +208,20 @@ function ToolbarLeftSection() {
 					}
 				/>
 
+				{/* Undo only, deliberately no redo button. `Command.redo()` defaults to
+				calling `execute()` again, and the split and duplicate commands mint
+				fresh element ids there — so redoing a split hands the right-hand clip
+				a new id while keyframe and mask references still point at the old
+				one. A redo button would expose that as a corrupted timeline; undo
+				never re-executes, so it is safe to ship on its own. Add redo only
+				once commands redo from their recorded state instead of re-running. */}
+				<ToolbarButton
+					icon={<HugeiconsIcon icon={Undo02Icon} />}
+					tooltip={`撤销（${getPlatformSpecialKey()}+Z）`}
+					disabled={!canUndo}
+					onClick={({ event }) => handleAction({ action: "undo", event })}
+				/>
+
 				<div className="bg-border mx-1 h-6 w-px" />
 
 				<Tooltip>
@@ -210,6 +234,17 @@ function ToolbarLeftSection() {
 						}
 					/>
 				</Tooltip>
+
+				{/* The only way out of a drawn range. The range overlays the ruler
+				and darkens the exported span, but nothing else on screen clears
+				it — without this, a user who framed a range by accident has to
+				reload the editor to get back to exporting the whole project. */}
+				<ToolbarButton
+					icon={<HugeiconsIcon icon={CancelSquareIcon} />}
+					tooltip="取消选定区域"
+					disabled={!hasRange}
+					onClick={() => clearTimeRange()}
+				/>
 
 				<GraphEditorPopover
 					open={graphEditor.open}

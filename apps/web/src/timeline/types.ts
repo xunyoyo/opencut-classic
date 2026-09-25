@@ -93,6 +93,20 @@ interface BaseAudioElement extends BaseTimelineElement {
 export interface UploadAudioElement extends BaseAudioElement {
 	sourceType: "upload";
 	mediaId: string;
+	/**
+	 * Id of the video element whose source audio this element was extracted from.
+	 *
+	 * Present only on separation products. Recovery cannot be reconstructed from
+	 * `mediaId` + `startTime`, because a user may legitimately drop a second copy
+	 * of the same asset at the same offset — deleting by that match would remove
+	 * their element too. The pointer is the only ownership proof we have, so it
+	 * must survive every element transform (move / split / duplicate all spread
+	 * the element, which preserves it).
+	 *
+	 * Absent on elements separated before this field existed. Those cannot be
+	 * attributed retroactively, so their audio is left in place on recovery.
+	 */
+	derivedFromElementId?: string;
 }
 
 export interface LibraryAudioElement extends BaseAudioElement {

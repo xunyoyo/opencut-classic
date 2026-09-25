@@ -22,6 +22,19 @@ export const TIMELINE_TRACK_THEME: Record<
 export const SELECTED_TRACK_ROW_CLASS = "bg-accent/50";
 export const DEFAULT_TIMELINE_BOOKMARK_COLOR = "#009dff";
 
+/**
+ * Export-range highlight. Kept to the accent token so the band reads as a
+ * selection rather than as new content, and deliberately low-opacity: at full
+ * strength it would hide the clips underneath, which is the one thing the user
+ * needs to see while choosing what to export.
+ */
+export const TIME_RANGE_THEME = {
+	fillClassName: "bg-primary/15 absolute inset-0",
+	edgeClassName: "bg-primary/70 absolute top-0 h-full w-0.5",
+	labelClassName:
+		"bg-primary text-primary-foreground absolute top-0 rounded-b px-1 text-[10px] leading-4 tabular-nums whitespace-nowrap",
+} as const;
+
 export function getTimelineElementClassName({
 	type,
 }: {

@@ -22,9 +22,10 @@ import { getSourceTimeAtClipTime, renderRetimedBuffer } from "@/retime";
 import { Input, ALL_FORMATS, BlobSource, AudioBufferSink } from "mediabunny";
 import { TICKS_PER_SECOND } from "@/wasm";
 import {
-	computeRmsBuckets,
-	type SampleBucket,
-} from "@/media/waveform-summary";
+	getAudioOutputLength,
+	getRangeOffsetSamples,
+} from "@/media/audio-range";
+import { computeRmsBuckets, type SampleBucket } from "@/media/waveform-summary";
 
 const MAX_AUDIO_CHANNELS = 2;
 const EXPORT_SAMPLE_RATE = 44100;
@@ -637,12 +638,20 @@ export async function createTimelineAudioBuffer({
 	duration,
 	sampleRate = EXPORT_SAMPLE_RATE,
 	audioContext,
+	range,
 }: {
 	tracks: SceneTracks;
 	mediaAssets: MediaAsset[];
 	duration: number;
 	sampleRate?: number;
 	audioContext?: AudioContext;
+	/**
+	 * Restricts the mix to a sub-range of the timeline. Backed by sample-index
+	 * subtraction rather than trimming a pre-mixed buffer, because mediabunny's
+	 * `AudioBufferSource.add()` timestamps the first buffer at 0 and offers no
+	 * way to place a buffer at an arbitrary offset (see getRangeOffsetStartSample).
+	 */
+	range?: { startTicks: number; endTicks: number };
 }): Promise<AudioBuffer | null> {
 	const context = audioContext ?? createAudioContext({ sampleRate });
 
@@ -655,13 +664,22 @@ export async function createTimelineAudioBuffer({
 	if (audioElements.length === 0) return null;
 
 	const outputChannels = 2;
-	const durationSeconds = duration / TICKS_PER_SECOND;
-	const outputLength = Math.ceil(durationSeconds * sampleRate);
+	const outputLength = getAudioOutputLength({
+		durationTicks: range ? range.endTicks - range.startTicks : duration,
+		sampleRate,
+	});
 	const outputBuffer = context.createBuffer(
 		outputChannels,
 		outputLength,
 		sampleRate,
 	);
+
+	const rangeOffsetSamples = range
+		? getRangeOffsetSamples({
+				rangeStartTicks: range.startTicks,
+				sampleRate,
+			})
+		: 0;
 
 	for (const element of audioElements) {
 		if (element.muted) continue;
@@ -688,6 +706,7 @@ export async function createTimelineAudioBuffer({
 			outputBuffer,
 			outputLength,
 			sampleRate,
+			rangeOffsetSamples,
 		});
 	}
 
@@ -828,6 +847,7 @@ function mixAudioChannels({
 	outputBuffer,
 	outputLength,
 	sampleRate,
+	rangeOffsetSamples = 0,
 }: {
 	element: CollectedAudioElement;
 	buffer: AudioBuffer;
@@ -836,10 +856,12 @@ function mixAudioChannels({
 	outputBuffer: AudioBuffer;
 	outputLength: number;
 	sampleRate: number;
+	rangeOffsetSamples?: number;
 }): void {
 	const { startTime, duration: elementDuration } = element;
 
-	const outputStartSample = Math.floor(startTime * sampleRate);
+	const outputStartSample =
+		Math.floor(startTime * sampleRate) - rangeOffsetSamples;
 	const renderedLength = Math.ceil(elementDuration * sampleRate);
 
 	const outputChannels = 2;
@@ -850,7 +872,11 @@ function mixAudioChannels({
 
 		for (let i = 0; i < renderedLength; i++) {
 			const outputIndex = outputStartSample + i;
+			// `i` stays on the clip's own clock so `clipTime` is the clip's
+			// absolute timeline position — that is what keeps a retimed clip's
+			// read cursor on the resampled axis. Only the write position moves.
 			if (outputIndex >= outputLength) break;
+			if (outputIndex < 0) continue;
 
 			const clipTime = i / sampleRate;
 			const sourceTime =

@@ -6,6 +6,7 @@ import {
 	type VideoCodec,
 } from "mediabunny";
 import { createTimelineAudioBuffer } from "@/media/audio";
+import { createWavBlob, interleaveAudioBuffer } from "@/media/wav";
 import type { SceneTracks } from "@/timeline";
 import type { MediaAsset } from "@/media/types";
 import { TICKS_PER_SECOND } from "@/wasm";
@@ -129,90 +130,3 @@ export const extractTimelineAudio = async ({
 
 	return createWavBlob({ samples: interleavedSamples });
 };
-
-function interleaveAudioBuffer({
-	audioBuffer,
-}: {
-	audioBuffer: AudioBuffer;
-}): Float32Array {
-	const numChannels = Math.min(NUM_CHANNELS, audioBuffer.numberOfChannels);
-	const length = audioBuffer.length;
-	const interleavedSamples = new Float32Array(length * NUM_CHANNELS);
-
-	// Resolve each output channel to its source buffer once. getChannelData() is
-	// a Web Audio API call rather than a property read, so leaving it inside the
-	// sample loop costs a JS/C++ boundary crossing per sample per channel — tens
-	// of millions of them for a few minutes of 44.1kHz audio, which blocks the
-	// main thread long enough to freeze the tab.
-	const sourceChannels: Float32Array[] = [];
-	for (let channel = 0; channel < NUM_CHANNELS; channel++) {
-		sourceChannels.push(
-			audioBuffer.getChannelData(
-				Math.min(channel, Math.max(0, numChannels - 1)),
-			),
-		);
-	}
-
-	for (let sampleIndex = 0; sampleIndex < length; sampleIndex++) {
-		for (let channel = 0; channel < NUM_CHANNELS; channel++) {
-			interleavedSamples[sampleIndex * NUM_CHANNELS + channel] =
-				sourceChannels[channel][sampleIndex] ?? 0;
-		}
-	}
-
-	return interleavedSamples;
-}
-
-function createWavBlob({ samples }: { samples: Float32Array }): Blob {
-	const numChannels = NUM_CHANNELS;
-	const bitsPerSample = 16;
-	const bytesPerSample = bitsPerSample / 8;
-	const numSamples = samples.length / numChannels;
-	const dataSize = numSamples * numChannels * bytesPerSample;
-	const buffer = new ArrayBuffer(44 + dataSize);
-	const view = new DataView(buffer);
-
-	// riff header
-	writeString({ view, offset: 0, str: "RIFF" });
-	view.setUint32(4, 36 + dataSize, true);
-	writeString({ view, offset: 8, str: "WAVE" });
-
-	// fmt chunk
-	writeString({ view, offset: 12, str: "fmt " });
-	view.setUint32(16, 16, true);
-	view.setUint16(20, 1, true);
-	view.setUint16(22, numChannels, true);
-	view.setUint32(24, SAMPLE_RATE, true);
-	view.setUint32(28, SAMPLE_RATE * numChannels * bytesPerSample, true);
-	view.setUint16(32, numChannels * bytesPerSample, true);
-	view.setUint16(34, bitsPerSample, true);
-
-	// data chunk
-	writeString({ view, offset: 36, str: "data" });
-	view.setUint32(40, dataSize, true);
-
-	// convert float32 to int16 and write
-	let offset = 44;
-	for (let i = 0; i < samples.length; i++) {
-		const sample = Math.max(-1, Math.min(1, samples[i]));
-		const int16 = sample < 0 ? sample * 0x8000 : sample * 0x7fff;
-		view.setInt16(offset, int16, true);
-		offset += 2;
-	}
-
-	return new Blob([buffer], { type: "audio/wav" });
-}
-
-function writeString({
-	view,
-	offset,
-	str,
-}: {
-	view: DataView;
-	offset: number;
-	str: string;
-}): void {
-	for (let i = 0; i < str.length; i++) {
-		view.setUint8(offset + i, str.charCodeAt(i));
-	}
-}

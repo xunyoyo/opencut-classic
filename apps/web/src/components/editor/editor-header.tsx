@@ -21,9 +21,20 @@ import { DEFAULT_LOGO_URL } from "@/site/brand";
 // import { SOCIAL_LINKS } from "@/site/social";
 import { toast } from "sonner";
 import { useEditor } from "@/editor/use-editor";
-import { CommandIcon, Logout05Icon } from "@hugeicons/core-free-icons";
+import {
+	CommandIcon,
+	Logout05Icon,
+	Undo02Icon,
+} from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { ShortcutsDialog } from "@/actions/components/shortcuts-dialog";
+import {
+	TooltipProvider,
+	Tooltip,
+	TooltipTrigger,
+	TooltipContent,
+} from "@/components/ui/tooltip";
+import { getPlatformSpecialKey } from "@/utils/platform";
 import Image from "next/image";
 import { cn } from "@/utils/ui";
 
@@ -35,11 +46,47 @@ export function EditorHeader() {
 				<EditableProjectName />
 			</div>
 			<nav className="flex items-center gap-2">
+				<UndoButton />
 				<FeedbackPopover />
 				<ExportButton />
 				<ThemeToggle />
 			</nav>
 		</header>
+	);
+}
+
+/**
+ * Mirrors the timeline toolbar's undo entry, for the same reason the top bar
+ * carries the export button: undo is the first thing a user reaches for after a
+ * bad cut, and it should not require knowing to look at the timeline.
+ */
+function UndoButton() {
+	const editor = useEditor();
+	const canUndo = useEditor((e) => e.command.canUndo());
+
+	return (
+		<TooltipProvider delayDuration={500}>
+			<Tooltip>
+				<TooltipTrigger asChild>
+					{/* The base button style sets `disabled:pointer-events-none`, so a
+					disabled button never receives the pointer events Radix needs to
+					open the tooltip. A plain span carries them instead. */}
+					<span className="inline-flex">
+						<Button
+							variant="text"
+							size="icon"
+							disabled={!canUndo}
+							aria-label="撤销"
+							onClick={() => editor.command.undo()}
+							className="rounded-sm size-8"
+						>
+							<HugeiconsIcon icon={Undo02Icon} />
+						</Button>
+					</span>
+				</TooltipTrigger>
+				<TooltipContent>{`撤销（${getPlatformSpecialKey()}+Z）`}</TooltipContent>
+			</Tooltip>
+		</TooltipProvider>
 	);
 }
 

@@ -3,13 +3,7 @@ import { EditorCore } from "@/core";
 
 const SNAPSHOT_UNSET = Symbol("snapshotUnset");
 
-function isShallowEqual({
-	a,
-	b,
-}: {
-	a: unknown;
-	b: unknown;
-}): boolean {
+function isShallowEqual({ a, b }: { a: unknown; b: unknown }): boolean {
 	if (Object.is(a, b)) return true;
 	if (!Array.isArray(a) || !Array.isArray(b)) return false;
 	if (a.length !== b.length) return false;
@@ -38,6 +32,10 @@ export function useEditor<T>(
 				editor.selection.subscribe(onChange),
 				editor.clipboard.subscribe(onChange),
 				editor.diagnostics.subscribe(onChange),
+				// Not for the timeline itself — the command stack is what decides
+				// whether undo has anything to do, and selectors read `canUndo()`,
+				// which no other manager's notification covers.
+				editor.command.subscribe(onChange),
 			];
 			return () => {
 				unsubscribers.forEach((unsubscribe) => {

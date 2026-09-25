@@ -9,6 +9,11 @@ import type {
 	VideoElement,
 } from "../types";
 
+export {
+	isDerivedFrom,
+	removeDerivedAudioElements,
+} from "./remove-derived-audio";
+
 type MediaAudioState = Pick<MediaAsset, "hasAudio">;
 
 export function isSourceAudioEnabled({
@@ -81,6 +86,7 @@ export function buildSeparatedAudioElement({
 		type: "audio",
 		sourceType: "upload",
 		mediaId: sourceElement.mediaId,
+		derivedFromElementId: sourceElement.id,
 		name: sourceElement.name,
 		duration: sourceElement.duration,
 		startTime: sourceElement.startTime,
@@ -111,9 +117,7 @@ export function getSourceAudioActionLabel({
 }: {
 	element: VideoElement;
 }): "提取音频" | "恢复音频" {
-	return isSourceAudioSeparated({ element })
-		? "恢复音频"
-		: "提取音频";
+	return isSourceAudioSeparated({ element }) ? "恢复音频" : "提取音频";
 }
 
 function cloneVolumeAnimations({

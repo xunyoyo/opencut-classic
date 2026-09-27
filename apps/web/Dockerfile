@@ -15,6 +15,7 @@ ARG NEXT_PUBLIC_SITE_URL=http://localhost:3000
 COPY package.json package.json
 COPY bun.lock bun.lock
 COPY turbo.json turbo.json
+COPY .npmrc .npmrc
 
 COPY apps/web/package.json apps/web/package.json
 RUN bun install

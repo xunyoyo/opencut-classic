@@ -31,10 +31,14 @@ export class MediaManager {
 
 		try {
 			await storageService.saveMediaAsset({ projectId, mediaAsset: newAsset });
-			this.editor.project.ratchetFpsForImportedMedia({
-				importedAssets: [newAsset],
+			const persistedAsset = await this.adoptPersistedFile({
+				projectId,
+				asset: newAsset,
 			});
-			return newAsset;
+			this.editor.project.ratchetFpsForImportedMedia({
+				importedAssets: [persistedAsset],
+			});
+			return persistedAsset;
 		} catch (error) {
 			console.error("Failed to save media asset:", error);
 			this.assets = this.assets.filter((asset) => asset.id !== newAsset.id);
@@ -179,6 +183,61 @@ export class MediaManager {
 				}
 			}
 		}
+	}
+
+	/**
+	 * Swaps a just-saved asset's `file` and `url` for ones read back from OPFS.
+	 *
+	 * An imported file (a download, a drop, a paste) lives on the JS heap, and
+	 * both the asset's `file` and the object URL minted from it keep it there
+	 * for as long as the asset exists — a whole video per asset, which is what
+	 * runs a large import out of memory. The copy read back from OPFS is a
+	 * handle on the bytes on disk, the same thing a reloaded project holds, so
+	 * once nothing references the original the heap copy can be collected.
+	 *
+	 * Falls back to the asset as saved when the read-back fails: that keeps the
+	 * old memory profile for this one asset instead of losing it.
+	 */
+	private async adoptPersistedFile({
+		projectId,
+		asset,
+	}: {
+		projectId: string;
+		asset: MediaAsset;
+	}): Promise<MediaAsset> {
+		let stored: MediaAsset | null = null;
+		try {
+			stored = await storageService.loadMediaAsset({
+				projectId,
+				id: asset.id,
+			});
+		} catch (error) {
+			console.warn("Failed to read back saved media file:", error);
+		}
+		if (!stored) return asset;
+
+		// Looked up again rather than taken from `asset`: the save is async, and
+		// the asset may have been removed (or the project closed) meanwhile.
+		const current = this.assets.find((item) => item.id === asset.id);
+		if (!current) {
+			if (stored.url) URL.revokeObjectURL(stored.url);
+			return asset;
+		}
+
+		const persistedAsset: MediaAsset = {
+			...current,
+			file: stored.file,
+			url: stored.url,
+		};
+		this.assets = this.assets.map((item) =>
+			item.id === asset.id ? persistedAsset : item,
+		);
+		if (current.url) URL.revokeObjectURL(current.url);
+		// A sink opened while the save was running reads the heap copy and
+		// would keep it alive; the next frame reopens it on the stored file.
+		videoCache.clearVideo({ mediaId: asset.id });
+		this.notify();
+		return persistedAsset;
 	}
 
 	private notify(): void {

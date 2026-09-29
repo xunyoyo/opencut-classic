@@ -80,8 +80,14 @@ export class RemoveMediaAssetCommand extends Command {
 			editor.timeline.deleteElements({ elements: elementsToRemove });
 		}
 
+		// Metadata only: `removedAsset.file` is read back from OPFS, so undo
+		// needs the bytes to still be there. `loadAllMediaAssets` reclaims them
+		// once the project is reopened without this removal having been undone.
 		storageService
-			.deleteMediaAsset({ projectId: this.projectId, id: this.assetId })
+			.deleteMediaAssetMetadata({
+				projectId: this.projectId,
+				id: this.assetId,
+			})
 			.catch((error) => {
 				console.error("Failed to delete media item:", error);
 			});
@@ -103,7 +109,7 @@ export class RemoveMediaAssetCommand extends Command {
 			});
 
 			storageService
-				.saveMediaAsset({
+				.restoreMediaAsset({
 					projectId: this.projectId,
 					mediaAsset: restoredAsset,
 				})

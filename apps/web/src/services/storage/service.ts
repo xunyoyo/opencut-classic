@@ -11,6 +11,10 @@ import {
 	readStorageQuotaStatus,
 } from "./quota";
 import type { MediaAssetData, StorageConfig, SerializedProject } from "./types";
+import {
+	type StoredMediaFileEntry,
+	selectOrphanedMediaFileKeys,
+} from "./media-orphans";
 import type { SavedSoundsData, SavedSound, SoundEffect } from "@/sounds/types";
 import {
 	migrations,
@@ -268,6 +272,29 @@ class StorageService {
 		await this.projectsAdapter.remove(id);
 	}
 
+	private buildMediaMetadata({
+		mediaAsset,
+		size,
+		lastModified,
+	}: {
+		mediaAsset: MediaAsset;
+		size: number;
+		lastModified: number;
+	}): MediaAssetData {
+		return {
+			id: mediaAsset.id,
+			name: mediaAsset.name,
+			type: mediaAsset.type,
+			size,
+			lastModified,
+			width: mediaAsset.width,
+			height: mediaAsset.height,
+			duration: mediaAsset.duration,
+			thumbnailUrl: mediaAsset.thumbnailUrl,
+			ephemeral: mediaAsset.ephemeral,
+		};
+	}
+
 	async saveMediaAsset({
 		projectId,
 		mediaAsset,
@@ -278,18 +305,11 @@ class StorageService {
 		const { mediaMetadataAdapter, mediaAssetsAdapter } =
 			this.getProjectMediaAdapters({ projectId });
 
-		const metadata: MediaAssetData = {
-			id: mediaAsset.id,
-			name: mediaAsset.name,
-			type: mediaAsset.type,
+		const metadata = this.buildMediaMetadata({
+			mediaAsset,
 			size: mediaAsset.file.size,
 			lastModified: mediaAsset.file.lastModified,
-			width: mediaAsset.width,
-			height: mediaAsset.height,
-			duration: mediaAsset.duration,
-			thumbnailUrl: mediaAsset.thumbnailUrl,
-			ephemeral: mediaAsset.ephemeral,
-		};
+		});
 
 		try {
 			await mediaAssetsAdapter.set({
@@ -327,6 +347,9 @@ class StorageService {
 		const { mediaMetadataAdapter, mediaAssetsAdapter } =
 			this.getProjectMediaAdapters({ projectId });
 
+		// `file` comes from `FileSystemFileHandle.getFile()`: a handle on the
+		// bytes in OPFS, read from disk on demand rather than held on the heap.
+		// `MediaManager` relies on this to let go of freshly imported files.
 		const [file, metadata] = await Promise.all([
 			mediaAssetsAdapter.get(id),
 			mediaMetadataAdapter.get(id),
@@ -384,7 +407,103 @@ class StorageService {
 			}
 		}
 
+		// Off the load path: nothing here depends on it, and a failure only
+		// means the orphaned bytes survive until the next time the project opens.
+		void this.pruneOrphanedMediaFiles({ projectId, mediaIds }).catch(
+			(error) => {
+				console.warn("Failed to prune orphaned media files:", error);
+			},
+		);
+
 		return mediaItems;
+	}
+
+	/**
+	 * Drops the metadata record of an asset but keeps its bytes.
+	 *
+	 * For removals that can be undone. The in-memory asset's `file` is read back
+	 * from OPFS, so it is only a handle on those bytes: deleting them would leave
+	 * undo holding a `File` that can no longer be read. The bytes left behind
+	 * are reclaimed by `pruneOrphanedMediaFiles` the next time the project loads.
+	 */
+	async deleteMediaAssetMetadata({
+		projectId,
+		id,
+	}: {
+		projectId: string;
+		id: string;
+	}): Promise<void> {
+		const { mediaMetadataAdapter } = this.getProjectMediaAdapters({
+			projectId,
+		});
+
+		await mediaMetadataAdapter.remove(id);
+	}
+
+	/**
+	 * Puts back an asset removed through `deleteMediaAssetMetadata`.
+	 *
+	 * When its bytes are still stored only the metadata record is written:
+	 * rewriting the file from `mediaAsset.file` would replace the very file that
+	 * `File` reads from, and a `File` read from OPFS stops being readable once
+	 * the underlying file changes. Falls back to a full save when the bytes are
+	 * gone (e.g. the asset was removed through `deleteMediaAsset`).
+	 */
+	async restoreMediaAsset({
+		projectId,
+		mediaAsset,
+	}: {
+		projectId: string;
+		mediaAsset: MediaAsset;
+	}): Promise<void> {
+		const { mediaMetadataAdapter, mediaAssetsAdapter } =
+			this.getProjectMediaAdapters({ projectId });
+
+		const storedFile = await mediaAssetsAdapter.get(mediaAsset.id);
+		if (!storedFile) {
+			await this.saveMediaAsset({ projectId, mediaAsset });
+			return;
+		}
+
+		await mediaMetadataAdapter.set({
+			key: mediaAsset.id,
+			value: this.buildMediaMetadata({
+				mediaAsset,
+				size: storedFile.size,
+				lastModified: mediaAsset.file.lastModified,
+			}),
+		});
+	}
+
+	private async pruneOrphanedMediaFiles({
+		projectId,
+		mediaIds,
+	}: {
+		projectId: string;
+		mediaIds: string[];
+	}): Promise<void> {
+		const { mediaAssetsAdapter } = this.getProjectMediaAdapters({
+			projectId,
+		});
+
+		const known = new Set(mediaIds);
+		const candidates: StoredMediaFileEntry[] = [];
+		for (const key of await mediaAssetsAdapter.list()) {
+			if (known.has(key)) continue;
+			const file = await mediaAssetsAdapter.get(key);
+			if (file) {
+				candidates.push({ key, lastModified: file.lastModified });
+			}
+		}
+
+		const orphanedKeys = selectOrphanedMediaFileKeys({
+			files: candidates,
+			metadataIds: known,
+			now: Date.now(),
+		});
+		for (const key of orphanedKeys) {
+			await mediaAssetsAdapter.remove(key);
+		}
 	}
 
 	async deleteMediaAsset({

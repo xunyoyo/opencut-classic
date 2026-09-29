@@ -5,6 +5,7 @@ import {
 	CanvasSink,
 	type WrappedCanvas,
 } from "mediabunny";
+import { type VideoSinkUsage, selectVideoSinksToEvict } from "./eviction";
 
 interface VideoSinkData {
 	input: Input;
@@ -22,6 +23,7 @@ export class VideoCache {
 	private initPromises = new Map<string, Promise<void>>();
 	private frameChain = new Map<string, Promise<unknown>>();
 	private seekGenerations = new Map<string, number>();
+	private usage = new Map<string, VideoSinkUsage>();
 
 	async getFrameAt({
 		mediaId,
@@ -32,26 +34,68 @@ export class VideoCache {
 		file: File;
 		time: number;
 	}): Promise<WrappedCanvas | null> {
-		await this.ensureSink({ mediaId, file });
+		const usage = this.markRequestStarted({ mediaId });
+		try {
+			await this.ensureSink({ mediaId, file });
 
-		const sinkData = this.sinks.get(mediaId);
-		if (!sinkData) return null;
+			const sinkData = this.sinks.get(mediaId);
+			if (!sinkData) return null;
 
-		const generation = (this.seekGenerations.get(mediaId) ?? 0) + 1;
-		this.seekGenerations.set(mediaId, generation);
+			const generation = (this.seekGenerations.get(mediaId) ?? 0) + 1;
+			this.seekGenerations.set(mediaId, generation);
 
-		const previous = this.frameChain.get(mediaId) ?? Promise.resolve();
-		const current = previous.then(() => {
-			if (this.seekGenerations.get(mediaId) !== generation) {
-				return sinkData.currentFrame ?? null;
-			}
-			return this.resolveFrame({ sinkData, time });
-		});
-		this.frameChain.set(
-			mediaId,
-			current.catch(() => {}),
-		);
-		return current;
+			const previous = this.frameChain.get(mediaId) ?? Promise.resolve();
+			const current = previous.then(() => {
+				if (this.seekGenerations.get(mediaId) !== generation) {
+					return sinkData.currentFrame ?? null;
+				}
+				return this.resolveFrame({ sinkData, time });
+			});
+			this.frameChain.set(
+				mediaId,
+				current.catch(() => {}),
+			);
+			return await current;
+		} finally {
+			usage.pendingRequests -= 1;
+			usage.lastUsedAt = Date.now();
+		}
+	}
+
+	private markRequestStarted({
+		mediaId,
+	}: {
+		mediaId: string;
+	}): VideoSinkUsage {
+		let usage = this.usage.get(mediaId);
+		if (!usage) {
+			usage = { mediaId, lastUsedAt: 0, pendingRequests: 0 };
+			this.usage.set(mediaId, usage);
+		}
+		usage.pendingRequests += 1;
+		usage.lastUsedAt = Date.now();
+		return usage;
+	}
+
+	/** Closes least-recently-used sinks beyond the bound; see `eviction.ts`. */
+	private evictIdleSinks(): void {
+		const open: VideoSinkUsage[] = [];
+		for (const mediaId of this.sinks.keys()) {
+			open.push(
+				this.usage.get(mediaId) ?? {
+					mediaId,
+					lastUsedAt: 0,
+					pendingRequests: 0,
+				},
+			);
+		}
+
+		for (const mediaId of selectVideoSinksToEvict({
+			sinks: open,
+			now: Date.now(),
+		})) {
+			this.clearVideo({ mediaId });
+		}
 	}
 
 	private async resolveFrame({
@@ -293,6 +337,7 @@ export class VideoCache {
 				prefetching: false,
 				prefetchPromise: null,
 			});
+			this.evictIdleSinks();
 		} catch (error) {
 			input.dispose();
 			console.error(`Failed to initialize video sink for ${mediaId}:`, error);
@@ -314,6 +359,7 @@ export class VideoCache {
 		this.initPromises.delete(mediaId);
 		this.frameChain.delete(mediaId);
 		this.seekGenerations.delete(mediaId);
+		this.usage.delete(mediaId);
 	}
 
 	clearAll(): void {

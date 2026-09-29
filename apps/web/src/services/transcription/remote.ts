@@ -28,7 +28,20 @@ const pollSchema = z.object({
 	language: z.string().nullish(),
 	text: z.string().nullish(),
 	segments: z
-		.array(z.object({ text: z.string(), start: z.number(), end: z.number() }))
+		.array(
+			z.object({
+				text: z.string(),
+				start: z.number(),
+				end: z.number(),
+				// Must be listed: zod strips unknown keys, and without the word
+				// timings captions fall back to spreading each segment evenly.
+				words: z
+					.array(
+						z.object({ word: z.string(), start: z.number(), end: z.number() }),
+					)
+					.nullish(),
+			}),
+		)
 		.nullish(),
 });
 
@@ -135,7 +148,9 @@ export async function transcribeRemote({
 		}
 
 		onProgress?.({ status: "complete", progress: 100 });
-		const segments = polled.data.segments ?? [];
+		const segments = (polled.data.segments ?? []).map(
+			({ words, ...segment }) => (words ? { ...segment, words } : segment),
+		);
 		return {
 			language: polled.data.language ?? "auto",
 			text: polled.data.text ?? segments.map((s) => s.text).join(""),

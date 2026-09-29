@@ -2,10 +2,18 @@ import type { LanguageCode } from "./languages";
 
 export type TranscriptionLanguage = LanguageCode | "auto";
 
+export interface TranscriptionWord {
+	word: string;
+	start: number;
+	end: number;
+}
+
 export interface TranscriptionSegment {
 	text: string;
 	start: number;
 	end: number;
+	/** Word-level timings. Only the AI-Saturn engine provides them. */
+	words?: TranscriptionWord[];
 }
 
 export interface TranscriptionResult {

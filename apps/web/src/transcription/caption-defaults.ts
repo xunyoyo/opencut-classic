@@ -11,3 +11,22 @@ export const MIN_CAPTION_DURATION_SECONDS = 0.8;
  * character range viewers are used to — without touching the Latin default.
  */
 export const DEFAULT_CHARS_PER_CAPTION = 9;
+
+/**
+ * Captions narrower than this many characters (a latin word counts as three)
+ * are folded into a neighbour when one is close enough. The recogniser splits
+ * off drawn-out particles on their own — a lone 「了」 — and showing those as
+ * captions of their own is what reads as broken. Distinct from
+ * `MIN_CAPTION_DURATION_SECONDS`, which only stretches how long a caption stays
+ * on screen and never changes its text.
+ */
+export const MIN_CAPTION_CHARS = 3;
+
+/** Silence at least this long counts as a clause break, like a comma. */
+export const CAPTION_CLAUSE_PAUSE_SECONDS = 0.3;
+
+/**
+ * Silence longer than this always ends a caption: joining text across it would
+ * put words on screen long before, or long after, they are spoken.
+ */
+export const CAPTION_MAX_JOIN_GAP_SECONDS = 1;

@@ -45,6 +45,17 @@ const innerSchema = z.object({
 						text: z.string(),
 						start: z.number(),
 						end: z.number(),
+						// zod strips unknown keys, so leaving this out silently drops
+						// the word timings the captions are placed by.
+						words: z
+							.array(
+								z.object({
+									word: z.string(),
+									start: z.number(),
+									end: z.number(),
+								}),
+							)
+							.nullish(),
 					}),
 				)
 				.nullish(),

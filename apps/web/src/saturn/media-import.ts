@@ -190,6 +190,12 @@ export async function importSaturnShotMedia({
 				if (created) {
 					byShotId.set(shot.shotId, created);
 					alreadyImported.add(shot.shotId);
+					// Recorded per shot, not once at the end: a tab that dies
+					// part-way through a large import would otherwise forget every
+					// shot it had already stored, and the next visit would import
+					// them all again as duplicates. Only successes are recorded —
+					// a failed shot marked as imported could never be retried.
+					saveImportedShotIds({ projectId, shotIds: alreadyImported });
 					landed = true;
 				}
 			} catch (error) {
@@ -209,11 +215,6 @@ export async function importSaturnShotMedia({
 			}
 		},
 	});
-
-	// Written from `alreadyImported`, which now includes everything that landed
-	// in this run. Only successes are in there: recording a shot whose download
-	// failed would make it look imported forever and it could never be retried.
-	saveImportedShotIds({ projectId, shotIds: alreadyImported });
 
 	return byShotId;
 }

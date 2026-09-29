@@ -19,6 +19,11 @@ import {
 	takeShotHandoff,
 } from "@/saturn/project-shots";
 import { importSaturnShotMedia } from "@/saturn/media-import";
+import {
+	estimateImportMemory,
+	formatGigabytes,
+	readMemorySignals,
+} from "@/saturn/memory-guard";
 import { projectShotSegments } from "@/saturn/types";
 import {
 	initializeGpuRenderer,
@@ -320,6 +325,24 @@ function SaturnMediaSync() {
 
 		const controller = new AbortController();
 		const editor = EditorCore.getInstance();
+
+		// Saved shots no longer stay on the heap, so this only fires when the
+		// tab is short of memory to begin with. Only a warning: the import still
+		// runs, and progress is recorded per shot, so a crash costs nothing
+		// already stored.
+		const memory = estimateImportMemory({
+			shotCount: pending.length,
+			signals: readMemorySignals(),
+		});
+		if (memory.exceedsBudget) {
+			toast.warning(
+				`本次要导入 ${pending.length} 个成片，预计占用约 ${formatGigabytes({ bytes: memory.estimatedBytes })} 内存`,
+				{
+					description: `超出浏览器当前可用内存（约 ${formatGigabytes({ bytes: memory.budgetBytes })}），页面可能崩溃。建议先关闭其他占内存的标签页；如果页面崩溃，重新打开项目会从中断处继续导入。`,
+					duration: 15_000,
+				},
+			);
+		}
 
 		// The editor is already usable by the time this runs, so the progress
 		// belongs in a corner rather than on a screen the user cannot leave.

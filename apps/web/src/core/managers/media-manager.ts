@@ -92,6 +92,10 @@ export class MediaManager {
 			const mediaAssets = await storageService.loadAllMediaAssets({
 				projectId,
 			});
+			// Every load mints a fresh object URL per asset, so the batch being
+			// replaced has to give its URLs back or each reload leaks one per
+			// asset for the life of the page.
+			this.revokeAssetUrls({ assets: this.assets, keep: mediaAssets });
 			this.assets = mediaAssets;
 			this.notify();
 		} catch (error) {
@@ -105,14 +109,7 @@ export class MediaManager {
 	async clearProjectMedia({ projectId }: { projectId: string }): Promise<void> {
 		waveformCache.clearAll();
 
-		this.assets.forEach((asset) => {
-			if (asset.url) {
-				URL.revokeObjectURL(asset.url);
-			}
-			if (asset.thumbnailUrl) {
-				URL.revokeObjectURL(asset.thumbnailUrl);
-			}
-		});
+		this.revokeAssetUrls({ assets: this.assets });
 
 		const mediaIds = this.assets.map((asset) => asset.id);
 		this.assets = [];
@@ -133,14 +130,7 @@ export class MediaManager {
 		videoCache.clearAll();
 		waveformCache.clearAll();
 
-		this.assets.forEach((asset) => {
-			if (asset.url) {
-				URL.revokeObjectURL(asset.url);
-			}
-			if (asset.thumbnailUrl) {
-				URL.revokeObjectURL(asset.thumbnailUrl);
-			}
-		});
+		this.revokeAssetUrls({ assets: this.assets });
 
 		this.assets = [];
 		this.notify();
@@ -162,6 +152,33 @@ export class MediaManager {
 	subscribe(listener: () => void): () => void {
 		this.listeners.add(listener);
 		return () => this.listeners.delete(listener);
+	}
+
+	/**
+	 * Revokes the object URLs held by `assets`, skipping any URL an asset in
+	 * `keep` still points at.
+	 *
+	 * Only `blob:` URLs are object URLs: thumbnails are data URLs, which own no
+	 * browser-side resource and are dropped with the string.
+	 */
+	private revokeAssetUrls({
+		assets,
+		keep = [],
+	}: {
+		assets: MediaAsset[];
+		keep?: MediaAsset[];
+	}): void {
+		const stillInUse = new Set(
+			keep.flatMap((asset) => [asset.url, asset.thumbnailUrl]),
+		);
+
+		for (const asset of assets) {
+			for (const url of [asset.url, asset.thumbnailUrl]) {
+				if (url?.startsWith("blob:") && !stillInUse.has(url)) {
+					URL.revokeObjectURL(url);
+				}
+			}
+		}
 	}
 
 	private notify(): void {

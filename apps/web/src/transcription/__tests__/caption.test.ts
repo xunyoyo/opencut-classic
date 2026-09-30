@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { buildCaptionChunks } from "@/transcription/caption";
+import { CAPTION_MIN_VISIBLE_SECONDS } from "@/transcription/caption-defaults";
 import type {
 	CaptionChunk,
 	TranscriptionSegment,
@@ -246,8 +247,209 @@ describe("buildCaptionChunks splitting", () => {
 
 		expect(chunks).toHaveLength(1);
 		expect(chunks[0].text).toBe("甲乙丙");
-		expect(chunks[0].duration).toBe(0);
+		// A zero-length caption is never on screen; it gets the minimum instead.
+		expect(chunks[0].duration).toBeCloseTo(CAPTION_MIN_VISIBLE_SECONDS, 9);
 		expect(Number.isFinite(chunks[0].startTime)).toBe(true);
+	});
+});
+
+describe("buildCaptionChunks keeps written forms intact", () => {
+	const textsOf = (text: string) =>
+		buildCaptionChunks({ segments: [{ text, start: 0, end: 4 }] }).map(
+			(chunk) => chunk.text,
+		);
+
+	test.each([
+		["油价涨到了7.5元一升", "7.5"],
+		["我们10:30在门口见", "10:30"],
+		["一共花了1,280块钱", "1,280"],
+		["新版本2.0上线后留存涨了12.5%", "12.5%"],
+	])("does not split the number in %s", (text, number) => {
+		const texts = textsOf(text);
+		expect(texts.some((caption) => caption.includes(number))).toBe(true);
+		expect(texts.join("")).toBe(text);
+	});
+
+	test("keeps a number together with the measure written after it", () => {
+		const texts = textsOf("油价涨到了7.5元一升，比上个月贵了");
+		expect(texts.some((caption) => caption.includes("7.5元"))).toBe(true);
+	});
+
+	test("keeps quotes, hyphens, currency and abbreviations with their words", () => {
+		const joined = textsOf(
+			'He said "it\'s a well-known fact" and it costs $5. Mr. Smith moved to the U.S. in 2019.',
+		).join(" ");
+
+		expect(joined).toBe(
+			'He said "it\'s a well-known fact" and it costs $5. Mr. Smith moved to the U.S. in 2019.',
+		);
+		expect(textsOf("see www.example.com and AI/ML now").join(" ")).toBe(
+			"see www.example.com and AI/ML now",
+		);
+	});
+
+	test("punctuation after a Chinese character stays with it", () => {
+		expect(textsOf("你好,OK我们走吧").join("")).toBe("你好，OK我们走吧");
+		expect(textsOf("他说“好的”然后走了").join("")).toBe("他说“好的”然后走了");
+		expect(textsOf("他说(真的)不来了").join("")).toBe("他说(真的)不来了");
+	});
+
+	test("keeps the Japanese prolonged sound mark inside its word", () => {
+		const texts = textsOf("コーヒーを飲みます。スーパーで買った。");
+		for (const caption of texts) {
+			expect(caption.startsWith("ー")).toBe(false);
+		}
+		// The full stop closing the first caption is dropped like any other
+		// caption-final stop; only the characters themselves must all survive.
+		expect(texts.join("").replace(/。/g, "")).toBe("コーヒーを飲みますスーパーで買った");
+	});
+
+	test("drops a fullwidth stop after a number at the end of a caption", () => {
+		for (const caption of textsOf("新版本2.0上线后留存涨了12.5%，大家辛苦了")) {
+			expect(caption.endsWith("，")).toBe(false);
+		}
+	});
+
+	test("fullwidth punctuation separates latin words without adding spaces", () => {
+		const texts = textsOf(
+			"我们支持Python、Java、Go、Rust、C++、TypeScript和Kotlin这几种语言",
+		);
+		expect(texts.length).toBeGreaterThan(1);
+		for (const caption of texts) expect(caption).not.toContain(" ");
+		// A 、 closing a caption is dropped like any caption-final mark.
+		expect(texts.join("").replace(/、/g, "")).toBe(
+			"我们支持PythonJavaGoRustC++TypeScript和Kotlin这几种语言",
+		);
+	});
+
+	test("a fullwidth full stop after a latin word still ends the sentence", () => {
+		const chunks = buildCaptionChunks({
+			segments: [{ text: "我用的是iPhone。2024年买的", start: 0, end: 3 }],
+		});
+		expect(chunks.map((chunk) => chunk.text)).toEqual([
+			"我用的是iPhone",
+			"2024年买的",
+		]);
+	});
+
+	test("a decimal at the end of a sentence still ends it", () => {
+		const texts = textsOf("The price was 3.99. We bought two of them anyway");
+		expect(texts.some((caption) => caption.endsWith("3.99."))).toBe(true);
+	});
+
+	test("keeps marks that stand on their own or end a segment", () => {
+		expect(textsOf("Tom & Jerry").join(" ")).toBe("Tom & Jerry");
+		expect(textsOf("Ça coûte 5 €").join(" ")).toBe("Ça coûte 5 €");
+		expect(textsOf("Es kostet 5 € pro Monat").join(" ")).toBe(
+			"Es kostet 5 € pro Monat",
+		);
+		const quoted = buildCaptionChunks({
+			segments: [
+				{ text: "他说：“", start: 0, end: 1 },
+				{ text: "我不去。”", start: 1.2, end: 2 },
+			],
+		});
+		expect(quoted.map((chunk) => chunk.text).join("")).toContain("“");
+	});
+
+	test("keeps a trailing ellipsis", () => {
+		expect(textsOf("好的...")).toEqual(["好的..."]);
+	});
+});
+
+describe("buildCaptionChunks never emits an invisible caption", () => {
+	test("words collapsed onto one instant still produce visible captions", () => {
+		const text = "我们明天再来看看这件事情好不好呢";
+		const chunks = buildCaptionChunks({
+			segments: [
+				{
+					text,
+					start: 10,
+					end: 14,
+					words: [...text].map((word) => ({ word, start: 13.9, end: 13.9 })),
+				},
+			],
+		});
+
+		expect(chunks.length).toBeGreaterThan(1);
+		for (const [index, chunk] of chunks.entries()) {
+			expect(chunk.duration).toBeGreaterThan(0);
+			const next = chunks[index + 1];
+			if (next) {
+				expect(endOf({ chunk })).toBeLessThanOrEqual(next.startTime + EPSILON);
+			}
+		}
+		expect(chunks.map((chunk) => chunk.text).join("")).toBe(text);
+	});
+
+	test("a collapsed run never delays the real dialogue after it", () => {
+		const noise = "谢谢观看".repeat(10);
+		const lines = ["我们明天见", "好的没问题", "路上小心啊"];
+		const chunks = buildCaptionChunks({
+			segments: [
+				{
+					text: noise,
+					start: 29.9,
+					end: 29.98,
+					words: [...noise].map((word) => ({ word, start: 29.98, end: 29.98 })),
+				},
+				...lines.map((text, index) => ({
+					text,
+					start: 30 + index * 1.5,
+					end: 31.4 + index * 1.5,
+				})),
+			],
+		});
+
+		for (const [index, text] of lines.entries()) {
+			const chunk = chunks.find((candidate) => candidate.text === text);
+			expect(chunk?.startTime).toBeCloseTo(30 + index * 1.5, 9);
+			expect(chunk?.duration ?? 0).toBeGreaterThan(1);
+		}
+		for (const chunk of chunks) expect(chunk.duration).toBeGreaterThan(0);
+	});
+
+	test("fast speech keeps every caption on its own start", () => {
+		const words = ["Yes.", "No.", "Okay.", "Right.", "Sure.", "Fine.", "Go."];
+		const chunks = buildCaptionChunks({
+			segments: [
+				{
+					text: words.join(" "),
+					start: 0,
+					end: 1.4,
+					words: words.map((word, index) => ({
+						word,
+						start: index * 0.2,
+						end: index * 0.2 + 0.2,
+					})),
+				},
+			],
+		});
+
+		for (const chunk of chunks) {
+			const index = words.findIndex((word) => chunk.text.startsWith(word));
+			expect(chunk.startTime).toBeCloseTo(index * 0.2, 9);
+		}
+	});
+
+	test("a word timed past its segment's end is still shown", () => {
+		const chunks = buildCaptionChunks({
+			segments: [
+				{
+					text: "你好朋友们",
+					start: 0,
+					end: 2,
+					words: [
+						{ word: "你好", start: 0.2, end: 0.8 },
+						{ word: "朋友们", start: 2.6, end: 3.2 },
+					],
+				},
+			],
+		});
+
+		for (const chunk of chunks) {
+			expect(chunk.duration).toBeGreaterThan(0);
+		}
 	});
 });
 

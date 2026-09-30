@@ -30,3 +30,10 @@ export const CAPTION_CLAUSE_PAUSE_SECONDS = 0.3;
  * put words on screen long before, or long after, they are spoken.
  */
 export const CAPTION_MAX_JOIN_GAP_SECONDS = 1;
+
+/**
+ * Shortest time a caption stays on screen when nothing follows it closely.
+ * Only matters when timings leave no room at all — a zero-length caption is
+ * never shown, which loses the text. Never pushes a later caption back.
+ */
+export const CAPTION_MIN_VISIBLE_SECONDS = 0.3;

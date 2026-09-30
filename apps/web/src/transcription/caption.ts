@@ -6,6 +6,7 @@ import type {
 import {
 	CAPTION_CLAUSE_PAUSE_SECONDS,
 	CAPTION_MAX_JOIN_GAP_SECONDS,
+	CAPTION_MIN_VISIBLE_SECONDS,
 	DEFAULT_CHARS_PER_CAPTION,
 	DEFAULT_WORDS_PER_CAPTION,
 	MIN_CAPTION_CHARS,
@@ -16,25 +17,57 @@ import {
  * Scripts written without word separators. Each character becomes its own
  * unit: `split(/\s+/)` would hand back a whole Chinese line as one "word".
  * Hangul is left out on purpose — Korean separates words with spaces, so it
- * tokenizes like latin text.
+ * tokenizes like latin text. ー (prolonged sound mark) and 々 (iteration
+ * mark) belong to no script of their own but are written inside Japanese and
+ * Chinese words.
  */
-const CJK_SCRIPT = "\\p{sc=Han}\\p{sc=Hiragana}\\p{sc=Katakana}";
+const CJK_SCRIPT = "\\p{sc=Han}\\p{sc=Hiragana}\\p{sc=Katakana}\\u30fc\\u3005";
 
 /**
- * One CJK character, one run of letters/digits from any other script, or one
- * punctuation mark. Whitespace is consumed and never becomes a unit.
+ * Punctuation that separates words even with no space around it: CJK and
+ * fullwidth marks, curly double quotes, the ellipsis, the em dash and middle
+ * dots. Without it 「Python、Java、Go」 is one run that can never be split.
+ * Curly single quotes are left out — ’ is also the apostrophe in "it’s".
+ */
+const SEPARATOR_PUNCT =
+	"\\u3000-\\u303f\\uff01-\\uff0f\\uff1a-\\uff20\\uff3b-\\uff40\\uff5b-\\uff65\\u201c\\u201d\\u2026\\u2014\\u00b7\\u30fb";
+
+/**
+ * One CJK character, one separating mark, or one run of anything else up to
+ * whitespace. Runs are kept whole so "7.5", "10:30", "1,280", "U.S." and
+ * "well-known" survive as written; only the punctuation at either end is
+ * split off afterwards.
  */
 const UNIT_REGEX = new RegExp(
-	`[${CJK_SCRIPT}]|(?:(?![${CJK_SCRIPT}])[\\p{L}\\p{N}\\p{M}'’])+|[^\\s]`,
+	`[${CJK_SCRIPT}]|[${SEPARATOR_PUNCT}]|[^\\s${CJK_SCRIPT}${SEPARATOR_PUNCT}]+`,
 	"gu",
 );
 const CJK_REGEX = new RegExp(`[${CJK_SCRIPT}]`, "u");
+const LEADING_PUNCT_REGEX = new RegExp("^[^\\p{L}\\p{N}]+", "u");
+const TRAILING_PUNCT_REGEX = new RegExp("[^\\p{L}\\p{N}]+$", "u");
+/**
+ * Marks that open what follows rather than close what precedes. Straight
+ * quotes are left out: they open or close depending on the spacing around
+ * them, which `attachLeading` already accounts for.
+ */
+const OPENING_PUNCT_REGEX = new RegExp("[\\p{Ps}\\p{Pi}\\p{Sc}#@¿¡]", "u");
 const CONTENT_REGEX = new RegExp("[\\p{L}\\p{N}]", "gu");
+const ENDS_WITH_DIGIT_REGEX = new RegExp("\\p{N}$", "u");
 const HAS_CONTENT_REGEX = new RegExp("[\\p{L}\\p{N}]", "u");
-const SENTENCE_END_REGEX = new RegExp("[。！？!?…]|(?<!\\.)\\.$");
+const SENTENCE_END_REGEX = /[。！？!?…]/;
+/** Words whose full stop is part of the word: "U.S.", "e.g.", "Mr.". */
+const ABBREVIATION_REGEX = new RegExp(
+	"^(?:\\p{L}\\.)+\\p{L}$|^(?:mr|mrs|ms|dr|prof|jr|sr|vs)$",
+	"iu",
+);
 const CLAUSE_END_REGEX = /[，,、；;：:—]/;
 /** Stripped from the end of a Chinese caption, as subtitles conventionally are. */
 const TRAILING_CJK_PUNCT_REGEX = /[，,、；;：:。.]+$/;
+/**
+ * Fullwidth stops only occur in CJK text, so they are dropped even when the
+ * caption happens to end on a number or latin word ("涨了12.5%，").
+ */
+const TRAILING_FULLWIDTH_PUNCT_REGEX = /[，、；：。]+$/;
 /** ASCII marks the recogniser emits inside Chinese text, shown in fullwidth. */
 const FULLWIDTH_PUNCT: Record<string, string> = {
 	",": "，",
@@ -52,6 +85,8 @@ interface CaptionUnit {
 	/** Punctuation that followed this unit. */
 	trail: string;
 	isCjk: boolean;
+	/** Whether whitespace preceded this unit in the source text. */
+	spaceBefore: boolean;
 	start: number;
 	end: number;
 	segmentIndex: number;
@@ -65,28 +100,113 @@ interface RawUnit {
 	lead: string;
 	trail: string;
 	isCjk: boolean;
+	spaceBefore: boolean;
 }
 
 function tokenize({ text }: { text: string }): RawUnit[] {
+	const normalized = text.normalize("NFC");
 	const units: RawUnit[] = [];
+	// Marks waiting for the next unit. Once anything is pending, later marks
+	// queue behind it rather than jumping back onto the previous unit, so the
+	// written order is kept.
 	let pendingLead = "";
-	for (const match of text.normalize("NFC").match(UNIT_REGEX) ?? []) {
-		const isContent = HAS_CONTENT_REGEX.test(match);
-		if (!isContent) {
-			const previous = units[units.length - 1];
-			if (previous) previous.trail += match;
-			else pendingLead += match;
+
+	const attachToPrevious = (marks: string) => {
+		const previous = units[units.length - 1];
+		if (previous && !pendingLead) previous.trail += marks;
+		else pendingLead += marks;
+	};
+
+	/**
+	 * Marks written against the following unit either close the previous one
+	 * (「好的,OK」) or open the next ("(OK", "$5"). After whitespace they can
+	 * only open; directly after a unit only the opening marks do.
+	 */
+	const attachLeading = ({
+		marks,
+		afterSpace,
+	}: {
+		marks: string;
+		afterSpace: boolean;
+	}) => {
+		if (afterSpace || units.length === 0 || pendingLead) {
+			pendingLead += marks;
+			return;
+		}
+		let index = 0;
+		while (index < marks.length && !OPENING_PUNCT_REGEX.test(marks[index])) {
+			index += 1;
+		}
+		units[units.length - 1].trail += marks.slice(0, index);
+		pendingLead += marks.slice(index);
+	};
+
+	for (const match of normalized.matchAll(UNIT_REGEX)) {
+		const token = match[0];
+		const offset = match.index ?? 0;
+		const tokenEnd = offset + token.length;
+		const afterSpace = offset === 0 || /\s/.test(normalized[offset - 1]);
+		const beforeSpace =
+			tokenEnd >= normalized.length || /\s/.test(normalized[tokenEnd]);
+
+		if (CJK_REGEX.test(token)) {
+			units.push({
+				text: token,
+				lead: pendingLead,
+				trail: "",
+				isCjk: true,
+				spaceBefore: afterSpace,
+			});
+			pendingLead = "";
 			continue;
 		}
+
+		if (!HAS_CONTENT_REGEX.test(token)) {
+			const previous = units[units.length - 1];
+			if (afterSpace && beforeSpace) {
+				// Standing on its own ("Tom & Jerry", "5 €"): stays with the word
+				// before it, spacing included.
+				if (previous && !pendingLead) previous.trail += ` ${token}`;
+				else pendingLead += `${token} `;
+			} else if (beforeSpace) {
+				attachToPrevious(token);
+			} else {
+				attachLeading({ marks: token, afterSpace });
+			}
+			continue;
+		}
+
+		const lead = token.match(LEADING_PUNCT_REGEX)?.[0] ?? "";
+		const trail = token.match(TRAILING_PUNCT_REGEX)?.[0] ?? "";
+		attachLeading({ marks: lead, afterSpace });
 		units.push({
-			text: match,
+			text: token.slice(lead.length, token.length - trail.length),
 			lead: pendingLead,
-			trail: "",
-			isCjk: CJK_REGEX.test(match),
+			trail,
+			isCjk: false,
+			spaceBefore: afterSpace,
 		});
 		pendingLead = "";
 	}
+
+	// An opening mark at the very end of a segment ("他说：“") has nothing left
+	// to open; it is kept on the last unit rather than dropped.
+	const last = units[units.length - 1];
+	if (last && pendingLead) last.trail += pendingLead;
 	return units;
+}
+
+/**
+ * Whether the unit ends a sentence. A full stop counts unless it is part of
+ * an ellipsis or an abbreviation; a decimal ("3.99.") still ends one.
+ */
+function endsSentence({ unit }: { unit: RawUnit }): boolean {
+	if (SENTENCE_END_REGEX.test(unit.trail)) return true;
+	return (
+		unit.trail.endsWith(".") &&
+		!unit.trail.endsWith("..") &&
+		!ABBREVIATION_REGEX.test(unit.text)
+	);
 }
 
 function contentChars({ text }: { text: string }): string[] {
@@ -222,15 +342,28 @@ function markWordStarts({
 		});
 	}
 
-	return units.map((unit, index) => ({
-		...unit,
-		wordStart:
-			!instance ||
-			index === 0 ||
-			!unit.isCjk ||
-			!units[index - 1].isCjk ||
-			wordStarts.has(index),
-	}));
+	return units.map((unit, index) => {
+		const previous = units[index - 1];
+		// A number written straight against the character after it is one
+		// word with its measure: 「7.5元」, 「2024年」, 「3个」.
+		const measuredNumber =
+			previous !== undefined &&
+			!previous.isCjk &&
+			unit.isCjk &&
+			!unit.spaceBefore &&
+			!previous.trail &&
+			ENDS_WITH_DIGIT_REGEX.test(previous.text);
+		return {
+			...unit,
+			wordStart:
+				!measuredNumber &&
+				(!instance ||
+					index === 0 ||
+					!unit.isCjk ||
+					!previous.isCjk ||
+					wordStarts.has(index)),
+		};
+	});
 }
 
 interface Boundary {
@@ -252,9 +385,10 @@ function classifyBoundary({
 }): Boundary {
 	const gap = next.start - previous.end;
 	if (gap > CAPTION_MAX_JOIN_GAP_SECONDS) return FORCED_BOUNDARY;
-	if (SENTENCE_END_REGEX.test(previous.trail)) return { split: 0, internal: 4 };
+	if (endsSentence({ unit: previous })) return { split: 0, internal: 4 };
 	if (
 		CLAUSE_END_REGEX.test(previous.trail) ||
+		previous.trail.includes("..") ||
 		gap >= CAPTION_CLAUSE_PAUSE_SECONDS
 	) {
 		return { split: 0.5, internal: 1.5 };
@@ -334,15 +468,27 @@ function chooseBreaks({
 function joinUnits({ units }: { units: CaptionUnit[] }): string {
 	const text = units.reduce((joined, unit, index) => {
 		const previous = units[index - 1];
+		// Only where the source had a space: 「Python、Java」 must not become
+		// 「Python、 Java」.
 		const separator =
-			previous !== undefined && !previous.isCjk && !unit.isCjk ? " " : "";
+			previous !== undefined &&
+			!previous.isCjk &&
+			!unit.isCjk &&
+			unit.spaceBefore
+				? " "
+				: "";
 		const trail = unit.isCjk
 			? unit.trail.replace(/[,?!:;]/g, (mark) => FULLWIDTH_PUNCT[mark] ?? mark)
 			: unit.trail;
 		return `${joined}${separator}${unit.lead}${unit.text}${trail}`;
 	}, "");
 	const last = units[units.length - 1];
-	return last?.isCjk ? text.replace(TRAILING_CJK_PUNCT_REGEX, "") : text;
+	// An ellipsis is kept: it says the line trails off, not that it ended.
+	if (!last || last.trail.includes("..")) return text;
+	return text.replace(
+		last.isCjk ? TRAILING_CJK_PUNCT_REGEX : TRAILING_FULLWIDTH_PUNCT_REGEX,
+		"",
+	);
 }
 
 export function buildCaptionChunks({
@@ -380,20 +526,60 @@ export function buildCaptionChunks({
 		start = end;
 	}
 
+	// Word timings can collapse onto one instant (the recogniser does this at
+	// the tail of a hallucinated run), and a caption with no duration is never
+	// visible. Captions sharing an instant are spread over the time up to the
+	// next caption that starts later — never past it, so a collapsed run can
+	// not delay the real dialogue that follows.
+	const startTimes = groups.map((group) => group[0].start);
+	for (let index = 1; index < startTimes.length; index++) {
+		startTimes[index] = Math.max(startTimes[index], startTimes[index - 1]);
+	}
+	for (let runStart = 0; runStart < groups.length; ) {
+		let runEnd = runStart + 1;
+		while (
+			runEnd < groups.length &&
+			startTimes[runEnd] === startTimes[runStart]
+		) {
+			runEnd += 1;
+		}
+		const count = runEnd - runStart;
+		if (count > 1) {
+			const from = startTimes[runStart];
+			const lastGroup = groups[runEnd - 1];
+			const until =
+				runEnd < groups.length
+					? startTimes[runEnd]
+					: Math.max(
+							from + count * CAPTION_MIN_VISIBLE_SECONDS,
+							lastGroup[lastGroup.length - 1].segmentEnd,
+						);
+			const step = (until - from) / count;
+			for (let offset = 1; offset < count; offset++) {
+				startTimes[runStart + offset] = from + offset * step;
+			}
+		}
+		runStart = runEnd;
+	}
+
 	return groups.map((group, index) => {
-		const first = group[0];
 		const last = group[group.length - 1];
-		const startTime = first.start;
+		const startTime = startTimes[index];
 		const displayEnd = Math.max(last.end, startTime + minDuration);
 		// The display floor never pushes into the next caption or past the
 		// dialogue it belongs to: overlapping captions would be dropped onto an
-		// extra track by the placement layer.
-		const nextStart = groups[index + 1]?.[0].start ?? Number.POSITIVE_INFINITY;
-		const endTime = Math.min(displayEnd, last.segmentEnd, nextStart);
+		// extra track by the placement layer. A word the recogniser timed past
+		// its own segment's end still counts as dialogue.
+		const nextStart = startTimes[index + 1] ?? Number.POSITIVE_INFINITY;
+		const dialogueEnd = Math.max(last.segmentEnd, last.end);
+		const endTime = Math.max(
+			Math.min(displayEnd, dialogueEnd, nextStart),
+			Math.min(startTime + CAPTION_MIN_VISIBLE_SECONDS, nextStart),
+		);
 		return {
 			text: joinUnits({ units: group }),
 			startTime,
-			duration: Math.max(0, endTime - startTime),
+			duration: endTime - startTime,
 		};
 	});
 }

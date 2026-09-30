@@ -11,6 +11,8 @@ export class MediaManager {
 	private assets: MediaAsset[] = [];
 	private isLoading = false;
 	private listeners = new Set<() => void>();
+	/** Saves still writing, by asset id; see `whenSaved`. */
+	private pendingSaves = new Map<string, Promise<unknown>>();
 
 	constructor(private editor: EditorCore) {}
 
@@ -29,8 +31,14 @@ export class MediaManager {
 		this.assets = [...this.assets, newAsset];
 		this.notify();
 
+		const saving = storageService.saveMediaAsset({
+			projectId,
+			mediaAsset: newAsset,
+		});
+		this.pendingSaves.set(newAsset.id, saving);
+
 		try {
-			await storageService.saveMediaAsset({ projectId, mediaAsset: newAsset });
+			await saving;
 			const persistedAsset = await this.adoptPersistedFile({
 				projectId,
 				asset: newAsset,
@@ -51,7 +59,26 @@ export class MediaManager {
 			}
 
 			return null;
+		} finally {
+			this.pendingSaves.delete(newAsset.id);
 		}
+	}
+
+	/**
+	 * Settles once `id`'s save, if one is running, has finished either way.
+	 *
+	 * Removing an asset while it is still being saved otherwise deletes its
+	 * metadata record before the save writes it, and the asset comes back the
+	 * next time the project is opened.
+	 */
+	whenSaved({ id }: { id: string }): Promise<void> {
+		const saving = this.pendingSaves.get(id);
+		return saving
+			? saving.then(
+					() => undefined,
+					() => undefined,
+				)
+			: Promise.resolve();
 	}
 
 	removeMediaAsset({ projectId, id }: { projectId: string; id: string }): void {
@@ -88,13 +115,24 @@ export class MediaManager {
 		this.editor.command.execute({ command });
 	}
 
-	async loadProjectMedia({ projectId }: { projectId: string }): Promise<void> {
+	/**
+	 * `pruneOrphanedFiles` is passed through to `loadAllMediaAssets`; see there
+	 * for why only a caller that has just cleared the undo history may set it.
+	 */
+	async loadProjectMedia({
+		projectId,
+		pruneOrphanedFiles = false,
+	}: {
+		projectId: string;
+		pruneOrphanedFiles?: boolean;
+	}): Promise<void> {
 		this.isLoading = true;
 		this.notify();
 
 		try {
 			const mediaAssets = await storageService.loadAllMediaAssets({
 				projectId,
+				pruneOrphanedFiles,
 			});
 			// Every load mints a fresh object URL per asset, so the batch being
 			// replaced has to give its URLs back or each reload leaks one per

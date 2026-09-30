@@ -49,7 +49,7 @@ export class CommandManager {
 				selectionOverride,
 			},
 		});
-		this.redoStack = [];
+		this.discardRedoStack();
 		this.notify();
 		return command;
 	}
@@ -61,7 +61,7 @@ export class CommandManager {
 				previousSelection: this.getSelectionSnapshot(),
 			},
 		});
-		this.redoStack = [];
+		this.discardRedoStack();
 		this.notify();
 	}
 
@@ -136,13 +136,14 @@ export class CommandManager {
 	 * project's tracks.
 	 */
 	clear(): void {
-		const hadEntries = this.history.length > 0 || this.redoStack.length > 0;
+		const dropped = [...this.history, ...this.redoStack];
 		this.history = [];
 		this.redoStack = [];
+		this.disposeEntries({ entries: dropped });
 		// Only wake subscribers on an actual change — callers clear defensively
 		// (including for projects that never recorded anything), and notifying
 		// unconditionally would re-render every editor subscriber on each load.
-		if (hadEntries) {
+		if (dropped.length > 0) {
 			this.notify();
 		}
 	}
@@ -150,7 +151,37 @@ export class CommandManager {
 	private pushHistoryEntry({ entry }: { entry: CommandHistoryEntry }): void {
 		this.history.push(entry);
 		if (this.history.length > MAX_HISTORY_DEPTH) {
-			this.history.splice(0, this.history.length - MAX_HISTORY_DEPTH);
+			this.disposeEntries({
+				entries: this.history.splice(
+					0,
+					this.history.length - MAX_HISTORY_DEPTH,
+				),
+			});
+		}
+	}
+
+	private discardRedoStack(): void {
+		const dropped = this.redoStack;
+		this.redoStack = [];
+		this.disposeEntries({ entries: dropped });
+	}
+
+	/**
+	 * Tells commands that just left the history for good (see
+	 * `Command.dispose`). A failure is logged rather than thrown: by now the
+	 * operation that pushed them out has already been applied.
+	 */
+	private disposeEntries({
+		entries,
+	}: {
+		entries: CommandHistoryEntry[];
+	}): void {
+		for (const entry of entries) {
+			try {
+				entry.command.dispose();
+			} catch (error) {
+				console.error("Failed to dispose command:", error);
+			}
 		}
 	}
 

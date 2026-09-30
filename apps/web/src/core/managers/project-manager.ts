@@ -195,7 +195,15 @@ export class ProjectManager {
 				});
 			}
 
-			await this.editor.media.loadProjectMedia({ projectId: id });
+			await this.editor.media.loadProjectMedia({
+				projectId: id,
+				// Safe only because the history was cleared above: no earlier
+				// removal of this project's media can be undone any more, so the
+				// bytes those removals kept (`deleteMediaAssetMetadata`) are truly
+				// orphaned. Removals made after this load are not affected: the
+				// set of ids to keep is read during the load itself.
+				pruneOrphanedFiles: true,
+			});
 
 			await loadFonts({
 				families: [

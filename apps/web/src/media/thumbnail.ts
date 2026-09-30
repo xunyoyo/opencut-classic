@@ -33,7 +33,12 @@ export function thumbnailSize({
 		targetWidth = Math.round(targetHeight * aspectRatio);
 	}
 
-	return { width: targetWidth, height: targetHeight };
+	// A very thin source (a 1×2000 strip, say) rounds its short edge to 0, and
+	// a canvas with a 0 edge encodes to an empty `data:,` URL.
+	return {
+		width: Math.max(1, targetWidth),
+		height: Math.max(1, targetHeight),
+	};
 }
 
 export function renderThumbnailDataUrl({

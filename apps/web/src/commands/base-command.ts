@@ -28,4 +28,15 @@ export abstract class Command {
 	redo(): CommandResult | undefined {
 		return this.execute();
 	}
+
+	/**
+	 * Called once the command has left the history for good — trimmed off the
+	 * bottom of the undo stack, dropped with the redo stack, or cleared with
+	 * the whole history — and so will never be undone or redone again. A
+	 * command that keeps something alive only for the sake of undo or redo
+	 * lets go of it here. Called at most once.
+	 */
+	dispose(): void {
+		// Most commands hold nothing beyond their own snapshots.
+	}
 }

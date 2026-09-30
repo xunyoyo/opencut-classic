@@ -18,12 +18,67 @@ interface VideoSinkData {
 	prefetchPromise: Promise<void> | null;
 }
 
+/**
+ * Opens a demuxer and a decoder on `file`. A parameter of the cache only so
+ * its bookkeeping can be tested without decoding anything.
+ */
+export type OpenVideoSink = ({
+	file,
+}: {
+	file: File;
+}) => Promise<{ input: Input; sink: CanvasSink }>;
+
+const openVideoSink: OpenVideoSink = async ({ file }) => {
+	const input = new Input({
+		source: new BlobSource(file),
+		formats: ALL_FORMATS,
+	});
+
+	try {
+		const videoTrack = await input.getPrimaryVideoTrack();
+		if (!videoTrack) {
+			throw new Error("No video track found");
+		}
+
+		const canDecode = await videoTrack.canDecode();
+		if (!canDecode) {
+			throw new Error("Video codec not supported for decoding");
+		}
+
+		const sink = new CanvasSink(videoTrack, {
+			poolSize: 3,
+			fit: "contain",
+		});
+		return { input, sink };
+	} catch (error) {
+		input.dispose();
+		throw error;
+	}
+};
+
 export class VideoCache {
 	private sinks = new Map<string, VideoSinkData>();
 	private initPromises = new Map<string, Promise<void>>();
+	/**
+	 * Which initialization may still register a sink for a media id.
+	 * `clearVideo` drops the entry: an initialization that is still opening
+	 * its sink at that point finds its generation gone and closes what it
+	 * opened instead of registering it.
+	 */
+	private initGenerations = new Map<string, number>();
+	private nextInitGeneration = 0;
 	private frameChain = new Map<string, Promise<unknown>>();
 	private seekGenerations = new Map<string, number>();
 	private usage = new Map<string, VideoSinkUsage>();
+	private openSink: OpenVideoSink;
+
+	constructor({
+		openSink = openVideoSink,
+	}: {
+		openSink?: OpenVideoSink;
+	} = {}) {
+		this.openSink = openSink;
+	}
 
 	async getFrameAt({
 		mediaId,
@@ -38,6 +93,11 @@ export class VideoCache {
 		try {
 			await this.ensureSink({ mediaId, file });
 
+			// No sink also when `clearVideo` ran while this request was opening
+			// one. Not reopened here: the request was made with the file that
+			// was just let go of (a removed asset, or the heap copy an import
+			// swapped for its stored file), and the next request brings the
+			// current one.
 			const sinkData = this.sinks.get(mediaId);
 			if (!sinkData) return null;
 
@@ -290,59 +350,56 @@ export class VideoCache {
 			return;
 		}
 
-		const initPromise = this.initializeSink({ mediaId, file });
+		this.nextInitGeneration += 1;
+		const generation = this.nextInitGeneration;
+		this.initGenerations.set(mediaId, generation);
+		const initPromise = this.initializeSink({ mediaId, file, generation });
 		this.initPromises.set(mediaId, initPromise);
 
 		try {
 			await initPromise;
 		} finally {
-			this.initPromises.delete(mediaId);
+			// Only while still current: after a `clearVideo` these entries may
+			// already belong to a newer initialization for the same id.
+			if (this.initGenerations.get(mediaId) === generation) {
+				this.initGenerations.delete(mediaId);
+				this.initPromises.delete(mediaId);
+			}
 		}
 	}
 	private async initializeSink({
 		mediaId,
 		file,
+		generation,
 	}: {
 		mediaId: string;
 		file: File;
+		generation: number;
 	}): Promise<void> {
-		const input = new Input({
-			source: new BlobSource(file),
-			formats: ALL_FORMATS,
-		});
-
-		try {
-			const videoTrack = await input.getPrimaryVideoTrack();
-			if (!videoTrack) {
-				throw new Error("No video track found");
-			}
-
-			const canDecode = await videoTrack.canDecode();
-			if (!canDecode) {
-				throw new Error("Video codec not supported for decoding");
-			}
-
-			const sink = new CanvasSink(videoTrack, {
-				poolSize: 3,
-				fit: "contain",
-			});
-
-			this.sinks.set(mediaId, {
-				input,
-				sink,
-				iterator: null,
-				currentFrame: null,
-				nextFrame: null,
-				lastTime: -1,
-				prefetching: false,
-				prefetchPromise: null,
-			});
-			this.evictIdleSinks();
-		} catch (error) {
-			input.dispose();
+		const { input, sink } = await this.openSink({ file }).catch((error) => {
 			console.error(`Failed to initialize video sink for ${mediaId}:`, error);
 			throw error;
+		});
+
+		if (this.initGenerations.get(mediaId) !== generation) {
+			// Cleared while opening. Registering it anyway would put back a sink
+			// on the file `clearVideo` let go of, with no usage record left, so
+			// the eviction pass below would pick it straight away.
+			input.dispose();
+			return;
 		}
+
+		this.sinks.set(mediaId, {
+			input,
+			sink,
+			iterator: null,
+			currentFrame: null,
+			nextFrame: null,
+			lastTime: -1,
+			prefetching: false,
+			prefetchPromise: null,
+		});
+		this.evictIdleSinks();
 	}
 
 	clearVideo({ mediaId }: { mediaId: string }): void {
@@ -357,13 +414,17 @@ export class VideoCache {
 		}
 
 		this.initPromises.delete(mediaId);
+		this.initGenerations.delete(mediaId);
 		this.frameChain.delete(mediaId);
 		this.seekGenerations.delete(mediaId);
 		this.usage.delete(mediaId);
 	}
 
 	clearAll(): void {
-		for (const [mediaId] of this.sinks) {
+		// Sinks still opening are cleared too, or they would register once
+		// open and outlive the clear.
+		const mediaIds = [...this.sinks.keys(), ...this.initPromises.keys()];
+		for (const mediaId of mediaIds) {
 			this.clearVideo({ mediaId });
 		}
 	}

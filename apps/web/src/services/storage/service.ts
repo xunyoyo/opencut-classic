@@ -15,6 +15,7 @@ import {
 	type StoredMediaFileEntry,
 	selectOrphanedMediaFileKeys,
 } from "./media-orphans";
+import { restoreStoredMediaFileType } from "./media-file-type";
 import type { SavedSoundsData, SavedSound, SoundEffect } from "@/sounds/types";
 import {
 	migrations,
@@ -56,6 +57,11 @@ class StorageService {
 	private savedSoundsAdapter: IndexedDBAdapter<SavedSoundsData>;
 	private config: StorageConfig;
 	private migrationsPromise: Promise<void> | null = null;
+	/**
+	 * Saves in flight, keyed `${projectId}/${id}`, counted because the same
+	 * asset can be written twice at once (an undo/redo racing the first save).
+	 */
+	private mediaFilesBeingSaved = new Map<string, number>();
 
 	constructor() {
 		this.config = {
@@ -311,6 +317,12 @@ class StorageService {
 			lastModified: mediaAsset.file.lastModified,
 		});
 
+		const savingKey = `${projectId}/${mediaAsset.id}`;
+		this.mediaFilesBeingSaved.set(
+			savingKey,
+			(this.mediaFilesBeingSaved.get(savingKey) ?? 0) + 1,
+		);
+
 		try {
 			await mediaAssetsAdapter.set({
 				key: mediaAsset.id,
@@ -334,7 +346,30 @@ class StorageService {
 			}
 
 			throw error;
+		} finally {
+			const remaining = (this.mediaFilesBeingSaved.get(savingKey) ?? 1) - 1;
+			if (remaining > 0) {
+				this.mediaFilesBeingSaved.set(savingKey, remaining);
+			} else {
+				this.mediaFilesBeingSaved.delete(savingKey);
+			}
 		}
+	}
+
+	/**
+	 * Whether a `saveMediaAsset` for this asset is still running.
+	 *
+	 * Its bytes then exist without a metadata record, which is exactly what an
+	 * orphan looks like, so every path that deletes orphaned bytes asks first.
+	 */
+	private isMediaFileBeingSaved({
+		projectId,
+		id,
+	}: {
+		projectId: string;
+		id: string;
+	}): boolean {
+		return this.mediaFilesBeingSaved.has(`${projectId}/${id}`);
 	}
 
 	async loadMediaAsset({
@@ -350,29 +385,20 @@ class StorageService {
 		// `file` comes from `FileSystemFileHandle.getFile()`: a handle on the
 		// bytes in OPFS, read from disk on demand rather than held on the heap.
 		// `MediaManager` relies on this to let go of freshly imported files.
-		const [file, metadata] = await Promise.all([
+		// (An SVG is the exception: it is re-read to get its type back, and
+		// is small enough for that not to matter.)
+		const [storedFile, metadata] = await Promise.all([
 			mediaAssetsAdapter.get(id),
 			mediaMetadataAdapter.get(id),
 		]);
 
-		if (!file || !metadata) return null;
+		if (!storedFile || !metadata) return null;
 
-		let url: string;
-		if (metadata.type === "image" && (!file.type || file.type === "")) {
-			try {
-				const text = await file.text();
-				if (text.trim().startsWith("<svg")) {
-					const svgBlob = new Blob([text], { type: "image/svg+xml" });
-					url = URL.createObjectURL(svgBlob);
-				} else {
-					url = URL.createObjectURL(file);
-				}
-			} catch {
-				url = URL.createObjectURL(file);
-			}
-		} else {
-			url = URL.createObjectURL(file);
-		}
+		const file = await restoreStoredMediaFileType({
+			file: storedFile,
+			type: metadata.type,
+		});
+		const url = URL.createObjectURL(file);
 
 		return {
 			id: metadata.id,
@@ -388,10 +414,22 @@ class StorageService {
 		};
 	}
 
+	/**
+	 * Reads every asset of a project back from storage.
+	 *
+	 * `pruneOrphanedFiles` also deletes the stored bytes no metadata record
+	 * points at. Those include the bytes of removals that can still be undone
+	 * (see `deleteMediaAssetMetadata`), so only a caller that has just dropped
+	 * the undo history — opening the project for editing — may pass it.
+	 * Anything else that merely reads a project's media (duplicating it, say)
+	 * must leave them alone: the project may be the one open in the editor.
+	 */
 	async loadAllMediaAssets({
 		projectId,
+		pruneOrphanedFiles = false,
 	}: {
 		projectId: string;
+		pruneOrphanedFiles?: boolean;
 	}): Promise<MediaAsset[]> {
 		const { mediaMetadataAdapter } = this.getProjectMediaAdapters({
 			projectId,
@@ -409,11 +447,13 @@ class StorageService {
 
 		// Off the load path: nothing here depends on it, and a failure only
 		// means the orphaned bytes survive until the next time the project opens.
-		void this.pruneOrphanedMediaFiles({ projectId, mediaIds }).catch(
-			(error) => {
-				console.warn("Failed to prune orphaned media files:", error);
-			},
-		);
+		if (pruneOrphanedFiles) {
+			void this.pruneOrphanedMediaFiles({ projectId, mediaIds }).catch(
+				(error) => {
+					console.warn("Failed to prune orphaned media files:", error);
+				},
+			);
+		}
 
 		return mediaItems;
 	}
@@ -424,7 +464,9 @@ class StorageService {
 	 * For removals that can be undone. The in-memory asset's `file` is read back
 	 * from OPFS, so it is only a handle on those bytes: deleting them would leave
 	 * undo holding a `File` that can no longer be read. The bytes left behind
-	 * are reclaimed by `pruneOrphanedMediaFiles` the next time the project loads.
+	 * are deleted by `deleteOrphanedMediaFile` once the removal drops out of the
+	 * undo history, or by `pruneOrphanedMediaFiles` the next time the project
+	 * opens if the page went away first.
 	 */
 	async deleteMediaAssetMetadata({
 		projectId,
@@ -475,6 +517,32 @@ class StorageService {
 		});
 	}
 
+	/**
+	 * Deletes the bytes `deleteMediaAssetMetadata` kept for undo, once the
+	 * removal can no longer be undone.
+	 *
+	 * Does nothing while the asset is still being saved or when a metadata
+	 * record points at the bytes again: in both cases they are not orphaned,
+	 * and deleting them would lose a file that is in use.
+	 */
+	async deleteOrphanedMediaFile({
+		projectId,
+		id,
+	}: {
+		projectId: string;
+		id: string;
+	}): Promise<void> {
+		const { mediaMetadataAdapter, mediaAssetsAdapter } =
+			this.getProjectMediaAdapters({ projectId });
+
+		if (await mediaMetadataAdapter.get(id)) return;
+		// Checked after the read, right before deleting, so a save that
+		// started while the record was being read is seen too.
+		if (this.isMediaFileBeingSaved({ projectId, id })) return;
+
+		await mediaAssetsAdapter.remove(id);
+	}
+
 	private async pruneOrphanedMediaFiles({
 		projectId,
 		mediaIds,
@@ -490,6 +558,7 @@ class StorageService {
 		const candidates: StoredMediaFileEntry[] = [];
 		for (const key of await mediaAssetsAdapter.list()) {
 			if (known.has(key)) continue;
+			if (this.isMediaFileBeingSaved({ projectId, id: key })) continue;
 			const file = await mediaAssetsAdapter.get(key);
 			if (file) {
 				candidates.push({ key, lastModified: file.lastModified });

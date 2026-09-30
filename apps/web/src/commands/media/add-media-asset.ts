@@ -8,11 +8,13 @@ import type { FrameRate } from "opencut-wasm";
 import { hasMediaId } from "@/timeline/element-utils";
 import { frameRatesEqual, getHighestImportedVideoFps } from "@/fps/utils";
 import { UpdateProjectSettingsCommand } from "@/commands/project";
+import { insertMediaAssetAt } from "./asset-list";
 
 export class AddMediaAssetCommand extends Command {
 	private assetId: string;
-	private savedAssets: MediaAsset[] | null = null;
 	private createdAsset: MediaAsset | null = null;
+	/** Where the asset went in the list, so a redo puts it back there. */
+	private insertedIndex = -1;
 	private previousProjectFps: FrameRate | null = null;
 	private appliedProjectFps: FrameRate | null = null;
 
@@ -34,15 +36,23 @@ export class AddMediaAssetCommand extends Command {
 
 	execute(): CommandResult | undefined {
 		const editor = EditorCore.getInstance();
-		this.savedAssets = [...editor.media.getAssets()];
+		const assets = editor.media.getAssets();
 
-		this.createdAsset = {
-			...this.asset,
-			id: this.assetId,
-		};
+		if (!this.createdAsset) {
+			this.createdAsset = {
+				...this.asset,
+				id: this.assetId,
+			};
+			this.insertedIndex = assets.length;
+		}
 
+		// Into the list as it is now; see `insertMediaAssetAt`.
 		editor.media.setAssets({
-			assets: [...this.savedAssets, this.createdAsset],
+			assets: insertMediaAssetAt({
+				assets,
+				asset: this.createdAsset,
+				index: this.insertedIndex,
+			}),
 		});
 		this.previousProjectFps = editor.project.getActiveOrNull()?.settings.fps ?? null;
 		this.appliedProjectFps = editor.project.ratchetFpsForImportedMedia({
@@ -98,18 +108,38 @@ export class AddMediaAssetCommand extends Command {
 	}
 
 	undo(): void {
-		if (this.savedAssets) {
-			const editor = EditorCore.getInstance();
-			editor.media.setAssets({ assets: this.savedAssets });
+		if (!this.createdAsset) return;
 
-			if (this.createdAsset) {
-				storageService
-					.deleteMediaAsset({ projectId: this.projectId, id: this.assetId })
-					.catch((error) => {
-						console.error("Failed to delete media item on undo:", error);
-					});
+		const editor = EditorCore.getInstance();
+		const assets = editor.media.getAssets();
+		const current = assets.find((asset) => asset.id === this.assetId);
+		if (current) {
+			// Only this asset comes out; the rest of the list may have changed
+			// since, see `insertMediaAssetAt`.
+			editor.media.setAssets({
+				assets: assets.filter((asset) => asset.id !== this.assetId),
+			});
+			if (current.url) {
+				URL.revokeObjectURL(current.url);
 			}
 		}
+
+		storageService
+			.deleteMediaAsset({ projectId: this.projectId, id: this.assetId })
+			.catch((error) => {
+				console.error("Failed to delete media item on undo:", error);
+			});
+	}
+
+	redo(): CommandResult | undefined {
+		if (this.createdAsset) {
+			// `undo` revoked the URL along with taking the asset out.
+			this.createdAsset = {
+				...this.createdAsset,
+				url: URL.createObjectURL(this.createdAsset.file),
+			};
+		}
+		return this.execute();
 	}
 
 	getAssetId(): string {

@@ -36,4 +36,10 @@ export class BatchCommand extends Command {
 
 		return latestSelectionResult;
 	}
+
+	dispose(): void {
+		for (const command of this.commands) {
+			command.dispose();
+		}
+	}
 }

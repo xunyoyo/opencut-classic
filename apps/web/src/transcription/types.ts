@@ -12,7 +12,10 @@ export interface TranscriptionSegment {
 	text: string;
 	start: number;
 	end: number;
-	/** Word-level timings. Only the AI-Saturn engine provides them. */
+	/**
+	 * Word-level timings. The AI-Saturn engine always provides them; the
+	 * in-browser engine does when the model was exported for it.
+	 */
 	words?: TranscriptionWord[];
 }
 
@@ -46,6 +49,11 @@ export interface TranscriptionModel {
 	name: string;
 	huggingFaceId: string;
 	description: string;
+	/**
+	 * Whether the export carries the cross-attentions word timestamps are
+	 * computed from. Asking a model without them throws.
+	 */
+	wordTimestamps: boolean;
 }
 
 export interface CaptionChunk {

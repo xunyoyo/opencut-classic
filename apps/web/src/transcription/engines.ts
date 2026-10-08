@@ -28,9 +28,9 @@ export function isRemoteTranscriptionEnabled(): boolean {
 }
 
 /**
- * Remote when it is available: configuring the endpoint is the opt-in, and the
- * reason to do it is to stop every user downloading Whisper.
+ * Local even when remote is offered: local is free, remote bills 土豆, so
+ * spending them has to be the user's explicit choice in the selector.
  */
 export function getDefaultTranscriptionEngine(): TranscriptionEngine {
-	return isRemoteTranscriptionEnabled() ? "remote" : "local";
+	return "local";
 }

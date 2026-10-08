@@ -361,11 +361,11 @@ export function Captions() {
 											<SelectValue />
 										</SelectTrigger>
 										<SelectContent>
-											<SelectItem value="remote">
-												{TRANSCRIPTION_ENGINE_LABELS.remote}
-											</SelectItem>
 											<SelectItem value="local">
 												{TRANSCRIPTION_ENGINE_LABELS.local}
+											</SelectItem>
+											<SelectItem value="remote">
+												{TRANSCRIPTION_ENGINE_LABELS.remote}
 											</SelectItem>
 										</SelectContent>
 									</Select>

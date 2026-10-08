@@ -10,6 +10,7 @@ import {
 	getFractionDigitsForStep,
 	snapToStep,
 } from "@/utils/math";
+import { useEffect, useRef, useState } from "react";
 import { SectionField } from "@/components/section";
 import { NumberField } from "@/components/ui/number-field";
 import { Switch } from "@/components/ui/switch";
@@ -139,10 +140,10 @@ function ParamInput({
 
 	if (param.type === "text") {
 		return (
-			<Textarea
+			<TextParamField
 				value={String(value)}
-				onChange={(event) => onPreview(event.currentTarget.value)}
-				onBlur={onCommit}
+				onPreview={onPreview}
+				onCommit={onCommit}
 			/>
 		);
 	}
@@ -164,6 +165,48 @@ function ParamInput({
 	}
 
 	return null;
+}
+
+/**
+ * The value comes back from the timeline store a render later than the
+ * keystroke that produced it, so binding the textarea straight to it makes
+ * React reset the value under the caret and throw it to the end — on every
+ * key, and through every step of an IME composition. While the field has
+ * focus it shows its own draft; it follows the store again once blurred.
+ */
+function TextParamField({
+	value,
+	onPreview,
+	onCommit,
+}: {
+	value: string;
+	onPreview: (value: string) => void;
+	onCommit: () => void;
+}) {
+	const [draft, setDraft] = useState(value);
+	const focusedRef = useRef(false);
+
+	useEffect(() => {
+		if (!focusedRef.current) setDraft(value);
+	}, [value]);
+
+	return (
+		<Textarea
+			value={draft}
+			onFocus={() => {
+				focusedRef.current = true;
+			}}
+			onChange={(event) => {
+				const next = event.currentTarget.value;
+				setDraft(next);
+				onPreview(next);
+			}}
+			onBlur={() => {
+				focusedRef.current = false;
+				onCommit();
+			}}
+		/>
+	);
 }
 
 function NumberParamField({

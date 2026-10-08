@@ -391,6 +391,12 @@ export function Captions() {
 						</SectionField>
 					</SectionFields>
 
+					{engine === "local" && (
+						<p className="text-muted-foreground text-xs">
+							本地部署模型识别较慢，请耐心等待；首次使用需要先下载模型。
+						</p>
+					)}
+
 					{engine === "remote" && points && (
 						<p className="text-muted-foreground text-xs">
 							可用土豆 {points.available}

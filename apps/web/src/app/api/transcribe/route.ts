@@ -78,7 +78,19 @@ export async function POST(request: NextRequest) {
 		);
 	}
 
-	const incoming = await request.formData();
+	// A body that was cut off or malformed throws here; outside a try that
+	// became a bare 500 with no `error`, and the client could only show its
+	// generic fallback.
+	let incoming: FormData;
+	try {
+		incoming = await request.formData();
+	} catch (error) {
+		console.error("Failed to parse transcription upload:", error);
+		return NextResponse.json(
+			{ error: "音频上传不完整，请重试" },
+			{ status: 400 },
+		);
+	}
 	const file = incoming.get("file");
 	if (!(file instanceof Blob)) {
 		return NextResponse.json({ error: "Missing audio file" }, { status: 400 });

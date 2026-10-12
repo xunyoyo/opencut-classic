@@ -295,6 +295,15 @@ export class RendererManager {
 			}
 		} catch (error) {
 			console.error("Export failed:", error);
+			// A Rust panic in the wasm renderer surfaces here only as the trap
+			// message "unreachable"; the panic hook in rust/wasm/src/gpu.rs keeps
+			// the real message on window.__wasmPanic.
+			const panicWindow = window as Window & { __wasmPanic?: string };
+			const wasmPanic = panicWindow.__wasmPanic;
+			if (wasmPanic) {
+				delete panicWindow.__wasmPanic;
+				return { success: false, error: `渲染器崩溃：${wasmPanic}` };
+			}
 			return {
 				success: false,
 				error: error instanceof Error ? error.message : "未知导出错误",

@@ -20,6 +20,14 @@ const nextConfig: NextConfig = {
 			? { exclude: ["error", "warn"] }
 			: false,
 	},
+	experimental: {
+		// With a proxy (src/proxy.ts) in front of every route, Next buffers
+		// request bodies and silently truncates them at 10MB by default. A
+		// timeline WAV for /api/transcribe passed that within a few minutes of
+		// audio, and the cut-off multipart failed formData() with "missing final
+		// boundary". nginx allows 200m for this site; this stays below it.
+		proxyClientMaxBodySize: "100mb",
+	},
 	reactStrictMode: true,
 	productionBrowserSourceMaps: true,
 	output: "standalone",

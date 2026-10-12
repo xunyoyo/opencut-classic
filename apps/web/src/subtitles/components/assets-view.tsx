@@ -28,6 +28,7 @@ import {
 	type TranscriptionEngine,
 } from "@/transcription/engines";
 import { decodeAudioToFloat32 } from "@/media/audio";
+import { createWavBlob } from "@/media/wav";
 import { buildCaptionChunks } from "@/transcription/caption";
 import { insertCaptionChunksAsTextTrack } from "@/subtitles/insert";
 import { parseSubtitleFile } from "@/subtitles/parse";
@@ -153,16 +154,28 @@ export function Captions() {
 				totalDuration: editor.timeline.getTotalDuration(),
 			});
 
-			// The remote engine wants a file, so the decode to Float32 samples is
-			// skipped entirely on that path — it is the slowest main-thread step
-			// here and nothing downstream would use the result.
+			// Both engines resample to 16kHz mono. The remote engine wants a file,
+			// so the samples are re-encoded as WAV: the 44.1kHz stereo timeline mix
+			// is ~10MB per minute, while 16kHz mono is under 2MB, which keeps long
+			// timelines well inside the upload limit.
 			const result =
 				engine === "remote"
-					? await transcribeRemote({
-							audioBlob,
-							language: selectedLanguage,
-							onProgress: handleProgress,
-						})
+					? await (async () => {
+							dispatch({ type: "update_step", step: "准备音频中" });
+							const { samples } = await decodeAudioToFloat32({
+								audioBlob,
+								sampleRate: DEFAULT_TRANSCRIPTION_SAMPLE_RATE,
+							});
+							return transcribeRemote({
+								audioBlob: createWavBlob({
+									samples,
+									sampleRate: DEFAULT_TRANSCRIPTION_SAMPLE_RATE,
+									numChannels: 1,
+								}),
+								language: selectedLanguage,
+								onProgress: handleProgress,
+							});
+						})()
 					: await (async () => {
 							dispatch({ type: "update_step", step: "准备音频中" });
 							const { samples } = await decodeAudioToFloat32({

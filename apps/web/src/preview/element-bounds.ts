@@ -8,6 +8,7 @@ import {
 } from "@/animation";
 import { resolveTransformAtTime } from "@/rendering/animation-values";
 import { buildTransformFromParams } from "@/rendering";
+import { getFitScale, type VisualFit } from "@/canvas/fit";
 
 export interface ElementBounds {
 	cx: number;
@@ -30,11 +31,13 @@ function getVisualElementBounds({
 	sourceWidth,
 	sourceHeight,
 	transform,
+	fit,
 }: {
 	canvasWidth: number;
 	canvasHeight: number;
 	sourceWidth: number;
 	sourceHeight: number;
+	fit?: VisualFit;
 	transform: {
 		scaleX: number;
 		scaleY: number;
@@ -42,12 +45,15 @@ function getVisualElementBounds({
 		rotate: number;
 	};
 }): ElementBounds {
-	const containScale = Math.min(
-		canvasWidth / sourceWidth,
-		canvasHeight / sourceHeight,
-	);
-	const scaledWidth = sourceWidth * containScale * transform.scaleX;
-	const scaledHeight = sourceHeight * containScale * transform.scaleY;
+	const fitScale = getFitScale({
+		canvasWidth,
+		canvasHeight,
+		sourceWidth,
+		sourceHeight,
+		fit,
+	});
+	const scaledWidth = sourceWidth * fitScale * transform.scaleX;
+	const scaledHeight = sourceHeight * fitScale * transform.scaleY;
 	const cx = canvasWidth / 2 + transform.position.x;
 	const cy = canvasHeight / 2 + transform.position.y;
 
@@ -111,11 +117,13 @@ function getElementBounds({
 	canvasSize,
 	mediaAsset,
 	localTime,
+	videoFit,
 }: {
 	element: TimelineElement;
 	canvasSize: { width: number; height: number };
 	mediaAsset?: MediaAsset | null;
 	localTime: number;
+	videoFit?: VisualFit;
 }): ElementBounds | null {
 	if (element.type === "audio" || element.type === "effect") return null;
 	if ("hidden" in element && element.hidden) return null;
@@ -136,6 +144,8 @@ function getElementBounds({
 			sourceWidth,
 			sourceHeight,
 			transform,
+			// Only video is covered; a still image keeps fitting inside.
+			fit: element.type === "video" ? videoFit : undefined,
 		});
 	}
 
@@ -250,11 +260,14 @@ export function getVisibleElementsWithBounds({
 	currentTime,
 	canvasSize,
 	mediaAssets,
+	videoFit,
 }: {
 	tracks: SceneTracks;
 	currentTime: number;
 	canvasSize: { width: number; height: number };
 	mediaAssets: MediaAsset[];
+	/** Must match the `videoFit` the scene is rendered with. */
+	videoFit?: VisualFit;
 }): ElementWithBounds[] {
 	const mediaMap = new Map(mediaAssets.map((m) => [m.id, m]));
 	const orderedTracks = [
@@ -293,6 +306,7 @@ export function getVisibleElementsWithBounds({
 				canvasSize,
 				mediaAsset,
 				localTime,
+				videoFit,
 			});
 			if (bounds) {
 				result.push({

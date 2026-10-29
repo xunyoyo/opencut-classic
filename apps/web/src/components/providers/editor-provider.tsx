@@ -153,6 +153,7 @@ export function EditorProvider({ projectId, children }: EditorProviderProps) {
 							const newProjectId = await editor.project.createNewProject({
 								name: projectName ?? "无标题项目",
 								saturnProjectId,
+								canvasRatio: pending?.ratio,
 							});
 
 							// Past this point the project exists, so the intent has

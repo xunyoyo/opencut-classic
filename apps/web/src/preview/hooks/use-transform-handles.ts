@@ -1,3 +1,4 @@
+import { getVideoFit } from "@/canvas/fit";
 import { useEffect, useReducer, useState } from "react";
 import { usePreviewViewport } from "@/preview/components/preview-viewport";
 import type { OnSnapLinesChange } from "@/preview/hooks/use-preview-interaction";
@@ -27,6 +28,9 @@ export function useTransformHandles({
 	const canvasSize = useEditor(
 		(e) => e.project.getActive().settings.canvasSize,
 	);
+	const videoFit = useEditor((e) =>
+		getVideoFit({ settings: e.project.getActive().settings }),
+	);
 	const deps: TransformHandleDeps = {
 		viewport,
 		input: {
@@ -38,6 +42,7 @@ export function useTransformHandles({
 			getCurrentTime: () => currentTime,
 			getMediaAssets: () => mediaAssets,
 			getCanvasSize: () => canvasSize,
+			getVideoFit: () => videoFit,
 		},
 		timeline: {
 			previewElements: (updates) =>

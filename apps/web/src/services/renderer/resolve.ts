@@ -21,6 +21,7 @@ import {
 import { resolveColorAtTime, resolveOpacityAtTime } from "@/animation/values";
 import { resolveTransformAtTime } from "@/rendering/animation-values";
 import { videoCache } from "@/services/video-cache/service";
+import { getFitScale } from "@/canvas/fit";
 import type { CanvasRenderer } from "./canvas-renderer";
 import type { AnyBaseNode } from "./nodes/base-node";
 import {
@@ -160,15 +161,18 @@ function resolveVisualState({
 		animations: params.animations,
 		localTime,
 	});
-	const containScale = Math.min(
-		context.renderer.width / sourceWidth,
-		context.renderer.height / sourceHeight,
-	);
+	const fitScale = getFitScale({
+		canvasWidth: context.renderer.width,
+		canvasHeight: context.renderer.height,
+		sourceWidth,
+		sourceHeight,
+		fit: params.fit,
+	});
 	const effectWidth = Math.round(
-		Math.abs(sourceWidth * containScale * transform.scaleX),
+		Math.abs(sourceWidth * fitScale * transform.scaleX),
 	);
 	const effectHeight = Math.round(
-		Math.abs(sourceHeight * containScale * transform.scaleY),
+		Math.abs(sourceHeight * fitScale * transform.scaleY),
 	);
 
 	return {

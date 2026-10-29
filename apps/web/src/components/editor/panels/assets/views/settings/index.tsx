@@ -125,6 +125,24 @@ export function SettingsView() {
 			)?.id ?? null)
 		: null;
 
+	// Choosing a different canvas by hand is taking the canvas back from
+	// AI-Saturn: the lock (and with it the cover-fit of videos) is released, so
+	// the project behaves like any other from then on. The ratio the platform
+	// had sent is remembered, so reopening with that same ratio respects the
+	// user's choice; only a changed ratio re-imposes a canvas. `null`, not
+	// undefined, so the release survives the merge into the saved settings.
+	const releaseCanvasLockIfResized = ({
+		shouldUpdateCanvasSize,
+	}: {
+		shouldUpdateCanvasSize: boolean;
+	}) =>
+		shouldUpdateCanvasSize && activeProject.settings.saturnCanvasLock
+			? {
+					saturnCanvasLock: null,
+					saturnPlatformRatio: activeProject.settings.saturnCanvasLock.ratio,
+				}
+			: {};
+
 	const updateCustomCanvasSize = ({
 		canvasSize,
 	}: {
@@ -157,6 +175,7 @@ export function SettingsView() {
 					? { canvasSizeMode: "custom" as const }
 					: {}),
 				lastCustomCanvasSize: canvasSize,
+				...releaseCanvasLockIfResized({ shouldUpdateCanvasSize }),
 			},
 		});
 	};
@@ -180,6 +199,7 @@ export function SettingsView() {
 				...(shouldUpdateCanvasSizeMode
 					? { canvasSizeMode: "preset" as const }
 					: {}),
+				...releaseCanvasLockIfResized({ shouldUpdateCanvasSize }),
 			},
 		});
 	};

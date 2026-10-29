@@ -3,6 +3,7 @@ import type { Effect, EffectPass } from "@/effects/types";
 import type { Mask } from "@/masks/types";
 import type { BlendMode, Transform } from "@/rendering";
 import type { RetimeConfig, VisualElement } from "@/timeline";
+import type { VisualFit } from "@/canvas/fit";
 
 export interface VisualNodeParams {
 	duration: number;
@@ -16,6 +17,8 @@ export interface VisualNodeParams {
 	blendMode?: BlendMode;
 	effects?: Effect[];
 	masks?: Mask[];
+	/** How the source is sized against the canvas. Absent means `contain`. */
+	fit?: VisualFit;
 }
 
 export interface ResolvedVisualNodeState {

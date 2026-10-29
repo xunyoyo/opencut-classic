@@ -1,5 +1,6 @@
 import type { PointerEvent as ReactPointerEvent } from "react";
 import type { MediaAsset } from "@/media/types";
+import type { VisualFit } from "@/canvas/fit";
 import {
 	getVisibleElementsWithBounds,
 	type Corner,
@@ -126,6 +127,8 @@ export interface SceneReader {
 	getCurrentTime: () => number;
 	getMediaAssets: () => MediaAsset[];
 	getCanvasSize: () => CanvasSize;
+	/** Fit the scene renders video with; omitted means `contain`. */
+	getVideoFit?: () => VisualFit;
 }
 
 export interface TimelinePreviewUpdate {
@@ -548,6 +551,7 @@ export class TransformHandleController {
 			currentTime: this.deps.scene.getCurrentTime(),
 			canvasSize: this.deps.scene.getCanvasSize(),
 			mediaAssets: this.deps.scene.getMediaAssets(),
+			videoFit: this.deps.scene.getVideoFit?.(),
 		});
 	}
 

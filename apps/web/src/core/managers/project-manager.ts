@@ -20,6 +20,8 @@ import {
 	getProjectDurationFromScenes,
 } from "@/timeline/scenes";
 import { buildScene } from "@/services/renderer/scene-builder";
+import { getVideoFit } from "@/canvas/fit";
+import { parseCustomRatio, settingsForRatio } from "@/saturn/custom-ratio";
 import { CanvasRenderer } from "@/services/renderer/canvas-renderer";
 import {
 	CURRENT_PROJECT_VERSION,
@@ -85,11 +87,19 @@ export class ProjectManager {
 	async createNewProject({
 		name,
 		saturnProjectId,
+		canvasRatio,
 	}: {
 		name: string;
 		/** Set when the project is opened from an AI-Saturn project. */
 		saturnProjectId?: number;
+		/**
+		 * The project's custom aspect ratio from AI-Saturn ("2.39:1"). A valid
+		 * one sets and locks the canvas; absent or invalid leaves the default
+		 * 1920x1080 untouched.
+		 */
+		canvasRatio?: string;
 	}): Promise<string> {
+		const parsedRatio = parseCustomRatio(canvasRatio);
 		const mainScene = buildDefaultScene({ name: "主场景", isMain: true });
 		const newProject: TProject = {
 			metadata: {
@@ -115,6 +125,7 @@ export class ProjectManager {
 					type: "color",
 					color: DEFAULT_BACKGROUND_COLOR,
 				},
+				...(parsedRatio && settingsForRatio({ parsed: parsedRatio })),
 			},
 			version: CURRENT_PROJECT_VERSION,
 		};
@@ -747,6 +758,7 @@ export class ProjectManager {
 			duration: duration || 1,
 			canvasSize,
 			background,
+			videoFit: getVideoFit({ settings: this.active.settings }),
 		});
 
 		const renderer = new CanvasRenderer({

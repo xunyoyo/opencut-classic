@@ -11,6 +11,7 @@ import { BlurBackgroundNode } from "./nodes/blur-background-node";
 import { EffectLayerNode } from "./nodes/effect-layer-node";
 import type { AnyBaseNode } from "./nodes/base-node";
 import type { TBackground, TCanvasSize } from "@/project/types";
+import type { VisualFit } from "@/canvas/fit";
 import { DEFAULT_BACKGROUND_BLUR_INTENSITY } from "@/background/blur";
 import {
 	buildTransformFromParams,
@@ -35,11 +36,13 @@ function buildTrackNodes({
 	mediaMap,
 	canvasSize,
 	isPreview,
+	videoFit,
 }: {
 	tracks: TimelineTrack[];
 	mediaMap: Map<string, MediaAsset>;
 	canvasSize: TCanvasSize;
 	isPreview?: boolean;
+	videoFit?: VisualFit;
 }): AnyBaseNode[] {
 	const nodes: AnyBaseNode[] = [];
 
@@ -82,6 +85,7 @@ function buildTrackNodes({
 							blendMode: readBlendModeFromParams({ params: element.params }),
 							effects: element.effects ?? [],
 							masks: element.masks ?? [],
+							...(videoFit && { fit: videoFit }),
 						}),
 					);
 				}
@@ -221,6 +225,8 @@ export type BuildSceneParams = {
 	duration: number;
 	background: TBackground;
 	isPreview?: boolean;
+	/** Fit for video clips only; images, text and stickers always contain. */
+	videoFit?: VisualFit;
 };
 
 export function buildScene({
@@ -230,6 +236,7 @@ export function buildScene({
 	duration,
 	background,
 	isPreview,
+	videoFit,
 }: BuildSceneParams) {
 	const rootNode = new RootNode({ duration });
 	const mediaMap = new Map(mediaAssets.map((m) => [m.id, m]));
@@ -246,6 +253,7 @@ export function buildScene({
 		mediaMap,
 		canvasSize,
 		isPreview,
+		videoFit,
 	});
 
 	if (background.type === "blur") {

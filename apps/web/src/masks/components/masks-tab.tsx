@@ -12,6 +12,7 @@ import { useEditor } from "@/editor/use-editor";
 import { useElementPreview } from "@/timeline/hooks/use-element-preview";
 import { useMenuPreview } from "@/editor/use-menu-preview";
 import { getVisibleElementsWithBounds } from "@/preview/element-bounds";
+import { getVideoFit } from "@/canvas/fit";
 import { HugeiconsIcon } from "@hugeicons/react";
 import {
 	ArrowExpandIcon,
@@ -143,6 +144,9 @@ export function MasksTab({ element, trackId }: MasksTabProps) {
 	const canvasSize = useEditor(
 		(e) => e.project.getActive().settings.canvasSize,
 	);
+	const videoFit = useEditor((e) =>
+		getVideoFit({ settings: e.project.getActive().settings }),
+	);
 	const masks = element.masks ?? [];
 	const renderMasks = renderElement.masks ?? masks;
 	const hasMask = masks.length > 0;
@@ -160,12 +164,14 @@ export function MasksTab({ element, trackId }: MasksTabProps) {
 				currentTime: clampedTime,
 				canvasSize,
 				mediaAssets,
+				videoFit,
 			}).find(
 				(item) => item.trackId === trackId && item.elementId === element.id,
 			)?.bounds ?? null
 		);
 	}, [
 		canvasSize,
+		videoFit,
 		currentTime,
 		element.duration,
 		element.id,

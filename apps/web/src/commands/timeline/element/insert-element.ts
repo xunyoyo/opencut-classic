@@ -10,7 +10,7 @@ import { generateUUID } from "@/utils/id";
 import { requiresMediaId } from "@/timeline/element-utils";
 import type { MediaAsset } from "@/media/types";
 import { DEFAULT_NEW_ELEMENT_DURATION } from "@/timeline/creation";
-import { floatToFrameRate } from "@/fps/utils";
+import { resolveFirstMediaSettings } from "./first-media-settings";
 import { graphicsRegistry, registerDefaultGraphics } from "@/graphics";
 import {
 	applyPlacement,
@@ -87,24 +87,21 @@ export class InsertElementCommand extends Command {
 				(item: MediaAsset) => item.id === newElement.mediaId,
 			);
 
-			if (asset?.width && asset?.height) {
-				const nextCanvasSize = { width: asset.width, height: asset.height };
-				const shouldSetOriginalCanvasSize =
-					!activeProject?.settings.originalCanvasSize;
+			// A canvas fixed by AI-Saturn is left alone (see
+			// resolveFirstMediaSettings); the frame rate still follows the clip.
+			const { canvas, fps } = resolveFirstMediaSettings({
+				settings: activeProject?.settings ?? null,
+				asset,
+			});
+			if (canvas) {
 				editor.project.updateSettings({
-					settings: {
-						canvasSize: nextCanvasSize,
-						...(shouldSetOriginalCanvasSize
-							? { originalCanvasSize: nextCanvasSize }
-							: {}),
-					},
+					settings: canvas,
 					pushHistory: false,
 				});
 			}
-
-			if (asset?.type === "video" && asset?.fps) {
+			if (fps) {
 				editor.project.updateSettings({
-					settings: { fps: floatToFrameRate(asset.fps) },
+					settings: fps,
 					pushHistory: false,
 				});
 			}

@@ -10,6 +10,7 @@ import { CanvasRenderer } from "@/services/renderer/canvas-renderer";
 import { TICKS_PER_SECOND } from "@/wasm";
 import type { RootNode } from "@/services/renderer/nodes/root-node";
 import { buildScene } from "@/services/renderer/scene-builder";
+import { getVideoFit } from "@/canvas/fit";
 import { PreviewOverlayLayer } from "./overlay-layer";
 import { PreviewInteractionOverlay } from "./preview-interaction-overlay";
 import { ContextMenu, ContextMenuTrigger } from "@/components/ui/context-menu";
@@ -101,6 +102,7 @@ function RenderTreeController() {
 	const activeProject = useEditor((e) => e.project.getActive());
 
 	const { width, height } = usePreviewSize();
+	const videoFit = getVideoFit({ settings: activeProject?.settings });
 
 	useDeepCompareEffect(() => {
 		if (!activeProject) return;
@@ -113,10 +115,18 @@ function RenderTreeController() {
 			canvasSize: { width, height },
 			background: activeProject.settings.background,
 			isPreview: true,
+			videoFit,
 		});
 
 		editor.renderer.setRenderTree({ renderTree });
-	}, [tracks, mediaAssets, activeProject?.settings.background, width, height]);
+	}, [
+		tracks,
+		mediaAssets,
+		activeProject?.settings.background,
+		width,
+		height,
+		videoFit,
+	]);
 
 	return null;
 }

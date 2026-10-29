@@ -1,3 +1,4 @@
+import { getVideoFit } from "@/canvas/fit";
 import { useEffect, useReducer, useState } from "react";
 import { useEditor } from "@/editor/use-editor";
 import { useCommittedRef } from "@/hooks/use-committed-ref";
@@ -36,6 +37,8 @@ export function usePreviewInteraction({
 			getCurrentTime: () => editor.playback.getCurrentTime(),
 			getMediaAssets: () => editor.media.getAssets(),
 			getCanvasSize: () => editor.project.getActive().settings.canvasSize,
+			getVideoFit: () =>
+				getVideoFit({ settings: editor.project.getActive().settings }),
 		},
 		selection: {
 			getSelected: () => editor.selection.getSelectedElements(),

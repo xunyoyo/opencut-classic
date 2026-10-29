@@ -19,6 +19,8 @@ import {
 import { projectShotSegments } from "@/saturn/types";
 import { storageService } from "@/services/storage/service";
 import type { TProjectMetadata } from "@/project/types";
+import { parseCustomRatio } from "@/saturn/custom-ratio";
+import { applyRatioToDraft } from "@/saturn/apply-draft-ratio";
 
 /**
  * Landing page for entering the editor from AI-Saturn.
@@ -208,6 +210,18 @@ function SaturnOpen() {
 	const reason = searchParams.get("reason");
 	/** Where the user was headed, so a re-entry resumes rather than restarts. */
 	const from = searchParams.get("from");
+	/**
+	 * The project's custom aspect ratio ("2.39:1"), when it has one. Parsed
+	 * where it is used; anything that does not validate is ignored and the
+	 * flow is exactly what it was before this parameter existed.
+	 */
+	const ratioParam = searchParams.get("ratio");
+	/**
+	 * `ratioCustom=1` marks `ratio` as the project's own custom ratio. Without
+	 * it, `ratio` is one of the platform's presets: it never configures a new
+	 * project, and on a draft it only matters to release an earlier lock.
+	 */
+	const ratioIsCustom = searchParams.get("ratioCustom") === "1";
 
 	// The upstream site's branding, when it sent any. AI-Saturn serves several
 	// brands off one codebase and tells them apart by Host, which this origin is
@@ -296,6 +310,7 @@ function SaturnOpen() {
 
 				const projectName =
 					projectNameParam?.trim() || `AI-Saturn 项目 ${targetProjectId}`;
+				const parsedRatio = parseCustomRatio(ratioParam);
 
 				saveShotPrefetch({
 					projectId: targetProjectId,
@@ -347,6 +362,21 @@ function SaturnOpen() {
 				if (existing) {
 					// Reopening a draft the user already has, so a `from` they were
 				// interrupted on is a place they can actually be returned to.
+				// The ratio is reconciled with the stored draft first (see
+				// planDraftRatioUpdate). It is a nicety, never a gate: a slow or
+				// failed attempt is logged and the draft opens as it is.
+				try {
+					await withDeadline({
+						work: applyRatioToDraft({
+							draftId: existing.id,
+							parsed: parsedRatio,
+							custom: ratioIsCustom,
+						}),
+						message: "同步项目比例超时",
+					});
+				} catch (error) {
+					console.warn("[saturn-open] ratio sync skipped", error);
+				}
 				openDraft(existing.id, { resume: true });
 				return;
 				}
@@ -356,7 +386,13 @@ function SaturnOpen() {
 				// shots and let the editor's "project not found" path do it with
 				// the platform's own project name.
 				setShotHandoff({ saturnProjectId: targetProjectId, shots });
-				markPendingOpen({ saturnProjectId: targetProjectId, projectName });
+				markPendingOpen({
+					saturnProjectId: targetProjectId,
+					projectName,
+					// Only a custom ratio configures a new project; a preset leaves
+					// the first clip to decide the canvas, as it always did.
+					...(parsedRatio && ratioIsCustom && { ratio: parsedRatio.ratio }),
+				});
 
 				setState({ status: "working", label: "正在创建草稿…" });
 				openDraft(`new-${targetProjectId}`);
@@ -368,7 +404,7 @@ function SaturnOpen() {
 				});
 			}
 		},
-		[token, projectNameParam, openDraft],
+		[token, projectNameParam, ratioParam, ratioIsCustom, openDraft],
 	);
 
 	// With a projectId the platform has already chosen for us — go straight in.

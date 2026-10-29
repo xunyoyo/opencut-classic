@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePreviewViewport } from "@/preview/components/preview-viewport";
 import { useEditor } from "@/editor/use-editor";
 import { useShiftKey } from "@/hooks/use-shift-key";
+import { getVideoFit } from "@/canvas/fit";
 import { getMaskDefinition } from "@/masks";
 import { appendPointToFreeformPathMask } from "@/masks/freeform/definition";
 import {
@@ -113,6 +114,9 @@ export function useMaskHandles({
 	const canvasSize = useEditor(
 		(e) => e.project.getActive().settings.canvasSize,
 	);
+	const videoFit = useEditor((e) =>
+		getVideoFit({ settings: e.project.getActive().settings }),
+	);
 	const selectedElements = useEditor((e) => e.selection.getSelectedElements());
 	const selectedMaskPointSelection = useEditor((e) =>
 		e.selection.getSelectedMaskPointSelection(),
@@ -123,6 +127,7 @@ export function useMaskHandles({
 		currentTime,
 		canvasSize,
 		mediaAssets,
+		videoFit,
 	});
 
 	const selectedWithMask =

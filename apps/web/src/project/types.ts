@@ -52,12 +52,34 @@ export interface TProjectMetadata {
 	saturnLaidOut?: true;
 }
 
+/**
+ * Marks a canvas that AI-Saturn fixed from the project's own aspect ratio.
+ *
+ * Additive and optional: projects created before this, and projects made
+ * directly in the editor, simply lack the field and behave exactly as before.
+ * While present, the first clip dropped on the timeline no longer rewrites the
+ * canvas, and video clips fill the frame (cover) instead of fitting inside it.
+ */
+export interface TSaturnCanvasLock {
+	/** Normalised ratio string as sent by the platform, e.g. "2.39:1". */
+	ratio: string;
+}
+
 export interface TProjectSettings {
 	fps: FrameRate;
 	canvasSize: TCanvasSize;
 	canvasSizeMode?: "preset" | "custom";
 	lastCustomCanvasSize?: TCanvasSize | null;
 	originalCanvasSize?: TCanvasSize | null;
+	/** `null` is an explicit release (the user took the canvas back). */
+	saturnCanvasLock?: TSaturnCanvasLock | null;
+	/**
+	 * The ratio AI-Saturn last handed this project (normalised), kept even
+	 * after the lock is released. It is how a reopen tells "the platform sent
+	 * the same ratio again" (respect the user's own canvas) from "the project's
+	 * ratio was changed on the platform" (apply it).
+	 */
+	saturnPlatformRatio?: string;
 	background: TBackground;
 }
 

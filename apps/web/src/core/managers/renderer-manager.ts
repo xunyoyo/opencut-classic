@@ -5,6 +5,7 @@ import { CanvasRenderer } from "@/services/renderer/canvas-renderer";
 import { isGpuAvailable } from "@/services/renderer/gpu-renderer";
 import { SceneExporter } from "@/services/renderer/scene-exporter";
 import { buildScene } from "@/services/renderer/scene-builder";
+import { getVideoFit } from "@/canvas/fit";
 import { createTimelineAudioBuffer } from "@/media/audio";
 import { exportTimelineAudio } from "@/media/audio-export";
 import { formatTimecode } from "opencut-wasm";
@@ -215,6 +216,7 @@ export class RendererManager {
 				duration,
 				canvasSize,
 				background: activeProject.settings.background,
+				videoFit: getVideoFit({ settings: activeProject.settings }),
 			});
 
 			const exporter = new SceneExporter({

@@ -26,6 +26,7 @@ import type {
 	TextureUploadDescriptor,
 } from "./types";
 import { DEFAULT_GRAPHIC_SOURCE_SIZE } from "@/graphics";
+import { getFitScale, type VisualFit } from "@/canvas/fit";
 
 export async function buildFrameDescriptor({
 	node,
@@ -253,6 +254,7 @@ async function collectVisualSourceNode({
 		resolved: node.resolved,
 		sourceWidth,
 		sourceHeight,
+		fit: node.params.fit,
 	});
 	const { mask, strokeLayer } = buildMaskArtifacts({
 		node,
@@ -324,23 +326,33 @@ function collectTextNode({
 	});
 }
 
-function computeVisualTransform({
+export function computeVisualTransform({
 	renderer,
 	resolved,
 	sourceWidth,
 	sourceHeight,
+	fit,
 }: {
-	renderer: CanvasRenderer;
-	resolved: ResolvedVisualSourceNodeState | ResolvedGraphicNodeState;
+	renderer: Pick<CanvasRenderer, "width" | "height">;
+	resolved: Pick<
+		ResolvedVisualSourceNodeState | ResolvedGraphicNodeState,
+		"transform"
+	>;
 	sourceWidth: number;
 	sourceHeight: number;
+	fit?: VisualFit;
 }): QuadTransformDescriptor {
-	const containScale = Math.min(
-		renderer.width / sourceWidth,
-		renderer.height / sourceHeight,
-	);
-	const scaledWidth = sourceWidth * containScale * resolved.transform.scaleX;
-	const scaledHeight = sourceHeight * containScale * resolved.transform.scaleY;
+	// `cover` only changes the base size; the user's own scale multiplies on
+	// top of it exactly as it does for `contain`.
+	const fitScale = getFitScale({
+		canvasWidth: renderer.width,
+		canvasHeight: renderer.height,
+		sourceWidth,
+		sourceHeight,
+		fit,
+	});
+	const scaledWidth = sourceWidth * fitScale * resolved.transform.scaleX;
+	const scaledHeight = sourceHeight * fitScale * resolved.transform.scaleY;
 	const absWidth = Math.abs(scaledWidth);
 	const absHeight = Math.abs(scaledHeight);
 

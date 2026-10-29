@@ -1,3 +1,4 @@
+import { parseCustomRatio } from "./custom-ratio";
 import { z } from "zod";
 import { clientFetchSignal, isFetchTimeout } from "./fetch-timeout";
 import {
@@ -248,6 +249,8 @@ const PENDING_OPEN_KEY = "saturn-pending-open";
 export interface SaturnPendingOpen {
 	saturnProjectId: number;
 	projectName: string;
+	/** Normalised custom ratio ("2.39:1") the project is to be created with. */
+	ratio?: string;
 }
 
 export function markPendingOpen(pending: SaturnPendingOpen): void {
@@ -289,6 +292,12 @@ export function readPendingOpen(): SaturnPendingOpen | null {
 				"projectName" in parsed && typeof parsed.projectName === "string"
 					? parsed.projectName
 					: `AI-Saturn 项目 ${parsed.saturnProjectId}`,
+			// Re-validated on the way out: localStorage is not trusted input.
+			...("ratio" in parsed &&
+				typeof parsed.ratio === "string" &&
+				parseCustomRatio(parsed.ratio) && {
+					ratio: parseCustomRatio(parsed.ratio)?.ratio,
+				}),
 		};
 	} catch {
 		return null;
